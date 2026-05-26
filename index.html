@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <meta name="color-scheme" content="dark">
+    <title>cantwaittoseeyouagain</title>
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23ffffff' opacity='0.9'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Text:wght@400;600&family=DM+Serif+Display&family=EB+Garamond:wght@400;600&family=Fraunces:wght@400;600&family=Inter:wght@300;500&family=Lora:wght@400;600&family=Manrope:wght@300;500&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <noscript>
+        <p style="position:fixed;inset:0;display:grid;place-items:center;color:#fff;">This page needs JavaScript.</p>
+    </noscript>
+
+    <main id="stage">
+        <section id="puzzle-layer">
+            <div id="puzzle-board" aria-label="puzzle board"></div>
+            <div id="pieces-container" aria-label="puzzle pieces"></div>
+            <button id="reset-button" type="button" aria-label="reset puzzle" title="reset puzzle">reset</button>
+        </section>
+
+        <div id="play-overlay" aria-hidden="true">
+            <button id="play-button" type="button" aria-label="play">
+                <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <polygon points="24,16 50,32 24,48" />
+                </svg>
+            </button>
+        </div>
+
+        <section id="slideshow" aria-hidden="true">
+            <div id="media-stage"></div>
+            <div id="text-overlay">
+                <div id="again">again?</div>
+                <div class="line" id="address">2512 Farlow Gap Ln, Raleigh NC, 27603</div>
+                <div class="line" id="time">6:30 pm</div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="/static/app.js"></script>
+</body>
+</html>

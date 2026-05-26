@@ -1,0 +1,21 @@
+# visit log — keep local only
+data/
+
+# downloaded sample assets — replace with your own and commit those if you want
+assets/*.jpg
+assets/*.jpeg
+assets/*.png
+assets/*.mp4
+assets/*.webm
+assets/*.mov
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# editor
+.vscode/
+.idea/
+.DS_Store
