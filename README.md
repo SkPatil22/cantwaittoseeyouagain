@@ -33,20 +33,50 @@ no ffmpeg needed). Drop your files into `assets/` named:
 assets/landscape-01.mp4    # slideshow #1 — first frame becomes the puzzle
 assets/landscape-02.mp4
 ...
-assets/landscape-10.mp4
+assets/landscape-NN.mp4    # any count works (designed for ~30)
 ```
 
-The server lists whatever's in `assets/` at runtime — no code edit needed
-when you add/remove/rename clips. Any number of clips works (not just 10).
+The server lists whatever's in `assets/` at runtime via `/api/media` —
+no code edit needed when you add/remove/rename clips. If a slot has both
+a video and an image (e.g. `landscape-03.mp4` + `landscape-03.jpg`), the
+**video wins** so you can drop in real footage without first deleting
+placeholders.
 
-If a slot has both an mp4 and a jpg (e.g. `landscape-03.mp4` +
-`landscape-03.jpg`), the **video wins**. Free landscape footage:
-pexels.com/videos, pixabay.com/videos, coverr.co, or your phone.
+### Pull a 30-clip starter set
 
-> The first-run bootstrap pulls jpg **placeholders** so the site isn't
-> empty before you've added clips. Replace them with real mp4s when ready
-> — you can delete the jpgs at the same time or leave them; videos take
-> precedence per slot.
+```sh
+# One-time: free Pexels key (no card, no payment, ~30 sec to register)
+#   https://www.pexels.com/api/
+export PEXELS_API_KEY=<paste-the-key>
+
+python3 tools/fetch_clips.py
+```
+
+Pulls a curated, themed 30-clip lineup into `assets/`:
+
+| slot | source | theme |
+|---|---|---|
+| 1–3   | NASA      | Earth from ISS, aurora, Earth-at-night (public domain) |
+| 4–6   | Pexels    | Arches/Milky Way / starry night |
+| 7–10  | Pexels    | Calm ocean / beaches / reef |
+| 11–14 | Pexels    | Mountains / alpine lakes |
+| 15–17 | Pexels    | Birds / eagle / flamingos |
+| 18–20 | Pexels    | Volcano eruption / lava |
+| 21–25 | Pexels    | Forest / waterfall / meadow |
+| 26–30 | Pexels    | Dunes / glacier / aurora / hills / storm |
+
+Idempotent (skips slots already filled). Use `--force` to re-download or
+`--only 4,12,18` to refresh specific slots.
+
+If you skip the Pexels key, only the 3 NASA slots populate; the script
+prints clear instructions for the rest. Free landscape footage also at
+<https://pixabay.com/videos>, <https://mixkit.co>, <https://coverr.co>,
+or your own phone — name them `landscape-NN.mp4`, drop them in, reload.
+
+> The first-run server bootstrap (`python3 server.py --setup-only`) pulls
+> 10 jpg **placeholders** so the page renders before you've added clips.
+> They sit in slots 1–10 and get overridden the moment you drop in the
+> matching `landscape-NN.mp4`.
 
 ## Controls
 
