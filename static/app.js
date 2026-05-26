@@ -3,7 +3,7 @@
 // line-erase animation, and the slideshow + cycling text.
 
 import { JigsawPuzzle } from '/static/puzzle.js';
-import { Slideshow, LANDSCAPES, isVideoSrc, extractFirstFrame } from '/static/slideshow.js';
+import { Slideshow, fetchMedia, isVideoSrc, extractFirstFrame } from '/static/slideshow.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -20,27 +20,33 @@ const addrEl     = $('#address');
 const timeEl     = $('#time');
 const ssToggle   = $('#slideshow-toggle');
 
-const slides = new Slideshow({
-    mediaEl, againEl, addressEl: addrEl, timeEl: timeEl, interval: 5500,
-});
-
+let slides = null;
 let puzzle = null;
 let playArmed = false;
 
-async function resolvePuzzleImage() {
-    const first = LANDSCAPES[0];
-    if (isVideoSrc(first)) {
+async function resolvePuzzleImage(firstSrc) {
+    if (!firstSrc) return null;
+    if (isVideoSrc(firstSrc)) {
         try {
-            return await extractFirstFrame(first);
+            return await extractFirstFrame(firstSrc);
         } catch (err) {
             console.warn('first-frame extract failed, falling back', err);
         }
     }
-    return first;
+    return firstSrc;
 }
 
 (async () => {
-    const puzzleImg = await resolvePuzzleImage();
+    const mediaList = await fetchMedia();
+    if (!mediaList.length) {
+        console.error('no landscape-* files in assets/ — drop some clips in.');
+        return;
+    }
+    slides = new Slideshow({
+        mediaEl, againEl, addressEl: addrEl, timeEl: timeEl,
+        mediaList, interval: 5500,
+    });
+    const puzzleImg = await resolvePuzzleImage(mediaList[0]);
     puzzle = new JigsawPuzzle({
         boardEl: board, piecesEl: pieces, resetBtn, puzzleImg,
     });

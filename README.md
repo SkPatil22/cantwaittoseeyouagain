@@ -23,21 +23,30 @@ Open <http://localhost:8000>.
 - `--no-download` — skip asset bootstrap
 - `--setup-only` — download assets and exit
 
-## Replacing the assets
+## The clips
 
-The slideshow uses ten clips; the puzzle uses the first frame of clip #1
-(extracted in the browser if it's a video, used directly if it's an image).
-Drop your own files in with these exact names:
+The slideshow is built for **video clips** — `.mp4`, `.webm`, or `.mov`.
+The puzzle uses the first frame of clip #1 (extracted in the browser, so
+no ffmpeg needed). Drop your files into `assets/` named:
 
 ```
-assets/landscape-01.jpg    # slideshow #1 — also becomes the puzzle image
-assets/landscape-02.jpg    # ...
+assets/landscape-01.mp4    # slideshow #1 — first frame becomes the puzzle
+assets/landscape-02.mp4
 ...
-assets/landscape-10.jpg
+assets/landscape-10.mp4
 ```
 
-Video works too — name them `.mp4`/`.webm`/`.mov` and update the list in
-`static/slideshow.js`. The slideshow hard-cuts between clips (no fades).
+The server lists whatever's in `assets/` at runtime — no code edit needed
+when you add/remove/rename clips. Any number of clips works (not just 10).
+
+If a slot has both an mp4 and a jpg (e.g. `landscape-03.mp4` +
+`landscape-03.jpg`), the **video wins**. Free landscape footage:
+pexels.com/videos, pixabay.com/videos, coverr.co, or your phone.
+
+> The first-run bootstrap pulls jpg **placeholders** so the site isn't
+> empty before you've added clips. Replace them with real mp4s when ready
+> — you can delete the jpgs at the same time or leave them; videos take
+> precedence per slot.
 
 ## Controls
 

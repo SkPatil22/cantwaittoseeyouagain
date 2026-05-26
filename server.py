@@ -17,6 +17,7 @@ import argparse
 import datetime
 import http.server
 import json
+import re
 import socketserver
 import ssl
 import sys
@@ -28,6 +29,11 @@ ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
 DATA = ROOT / "data"
 VISITS_LOG = DATA / "visits.log"
+
+VIDEO_EXTS = {".mp4", ".webm", ".mov"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+MEDIA_EXTS = VIDEO_EXTS | IMAGE_EXTS
+LANDSCAPE_RE = re.compile(r"^landscape-\d+\.[a-z0-9]+$", re.IGNORECASE)
 
 # Curated Picsum IDs that point at landscape-style photos. If any of these
 # go missing upstream you can replace the files in assets/ by hand.
@@ -51,21 +57,61 @@ def _download(url: str, dest: Path) -> bool:
 
 
 def bootstrap_assets() -> None:
-    """Download sample images if assets are missing. Idempotent.
+    """Pull jpg PLACEHOLDERS so the site renders on first run.
 
-    The puzzle uses the first slideshow clip directly (first frame extracted
-    in the browser when it's a video), so we only need the ten landscape
-    files — no separate puzzle image.
+    The slideshow is intended for video clips (.mp4/.webm/.mov). These jpgs
+    are just so the demo isn't an empty page — replace them with real video
+    clips as `landscape-01.mp4` … `landscape-10.mp4` (delete the .jpg once
+    the .mp4 is in place). The server serves whatever's in assets/ at
+    runtime via /api/media; no code edits required to swap.
+
+    Free landscape video sources to consider:
+      - pexels.com/videos (CC0, requires sign-in for download)
+      - pixabay.com/videos (CC0)
+      - coverr.co (free with attribution sometimes)
+      - your own phone footage
     """
     ASSETS.mkdir(exist_ok=True)
+    # Only fill empty slots — never overwrite anything the user has put in.
     for i, pid in enumerate(LANDSCAPE_IDS, start=1):
-        f = ASSETS / f"landscape-{i:02d}.jpg"
-        if f.exists():
+        slot_has_media = any(
+            (ASSETS / f"landscape-{i:02d}{ext}").exists() for ext in MEDIA_EXTS
+        )
+        if slot_has_media:
             continue
+        f = ASSETS / f"landscape-{i:02d}.jpg"
         url = f"https://picsum.photos/id/{pid}/{WIDTH}/{HEIGHT}"
-        print(f"Downloading landscape {i:02d} -> {f.name}")
+        print(f"Placeholder landscape {i:02d} -> {f.name} (replace with mp4 when ready)")
         if not _download(url, f):
             print(f"  drop your own jpg/mp4 at {f}", file=sys.stderr)
+
+
+def list_media() -> list[str]:
+    """Return URL paths for landscape-* media files, sorted by name.
+
+    If both an mp4 and a jpg exist for the same slot (e.g. landscape-01.mp4
+    + landscape-01.jpg) we prefer the video so the user can drop in real
+    footage without first deleting the placeholder.
+    """
+    if not ASSETS.exists():
+        return []
+    by_slot: dict[str, tuple[int, str]] = {}
+    for f in ASSETS.iterdir():
+        if not f.is_file() or not LANDSCAPE_RE.match(f.name):
+            continue
+        ext = f.suffix.lower()
+        if ext not in MEDIA_EXTS:
+            continue
+        slot = f.name.rsplit(".", 1)[0]
+        # Score: videos (1) outrank images (0).
+        score = 1 if ext in VIDEO_EXTS else 0
+        current = by_slot.get(slot)
+        if current is None or score > current[0]:
+            by_slot[slot] = (score, f.name)
+    out = []
+    for slot in sorted(by_slot.keys()):
+        out.append(f"/assets/{by_slot[slot][1]}")
+    return out
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -96,9 +142,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             fh.write(json.dumps(entry) + "\n")
 
     def do_GET(self) -> None:
+        if self.path == "/api/media":
+            self._serve_media_list()
+            return
         if self.path in ("/", "/index.html"):
             self._log_visit()
         super().do_GET()
+
+    def _serve_media_list(self) -> None:
+        body = json.dumps({"media": list_media()}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, fmt, *args) -> None:
         sys.stderr.write(

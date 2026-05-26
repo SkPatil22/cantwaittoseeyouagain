@@ -1,21 +1,24 @@
 // Slideshow with hard cuts between clips, pause/resume, and a helper for
 // pulling the first frame of a video as a still image (used by the puzzle).
-
-export const LANDSCAPES = [
-    '/assets/landscape-01.jpg',
-    '/assets/landscape-02.jpg',
-    '/assets/landscape-03.jpg',
-    '/assets/landscape-04.jpg',
-    '/assets/landscape-05.jpg',
-    '/assets/landscape-06.jpg',
-    '/assets/landscape-07.jpg',
-    '/assets/landscape-08.jpg',
-    '/assets/landscape-09.jpg',
-    '/assets/landscape-10.jpg',
-];
+//
+// The set of clips is discovered at runtime via `/api/media` — drop
+// landscape-NN.mp4 (or .webm/.mov, or .jpg as a fallback) into assets/ and
+// the server lists them, video preferred per slot. No code edit needed.
 
 export function isVideoSrc(src) {
     return /\.(mp4|webm|mov)(\?|$)/i.test(src);
+}
+
+export async function fetchMedia() {
+    try {
+        const res = await fetch('/api/media', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = await res.json();
+        return Array.isArray(data.media) ? data.media : [];
+    } catch (err) {
+        console.warn('fetchMedia failed', err);
+        return [];
+    }
 }
 
 // Decode the first frame of a video and return a jpeg data URL. Used to give
@@ -90,11 +93,12 @@ const COLORS = [
 ];
 
 export class Slideshow {
-    constructor({ mediaEl, againEl, addressEl, timeEl, interval = 5500 }) {
+    constructor({ mediaEl, againEl, addressEl, timeEl, mediaList, interval = 5500 }) {
         this.media = mediaEl;
         this.again = againEl;
         this.address = addressEl;
         this.time = timeEl;
+        this.mediaList = mediaList || [];
         this.interval = interval;
         this.idx = -1;
         this.elements = [];
@@ -106,7 +110,7 @@ export class Slideshow {
     _build() {
         this.media.innerHTML = '';
         this.elements = [];
-        for (const src of LANDSCAPES) {
+        for (const src of this.mediaList) {
             let el;
             if (isVideoSrc(src)) {
                 el = document.createElement('video');
