@@ -73,9 +73,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def _log_visit(self) -> None:
+        # Behind Cloudflare Tunnel the connection comes from localhost; the
+        # real visitor IP rides in CF-Connecting-IP. Fall back to X-Forwarded-
+        # For (any other proxy) and finally to the raw peer address.
+        xff = self.headers.get("X-Forwarded-For", "")
+        xff_first = xff.split(",")[0].strip() if xff else ""
+        ip = (
+            self.headers.get("CF-Connecting-IP")
+            or xff_first
+            or self.client_address[0]
+        )
         entry = {
             "ts": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "ip": self.headers.get("X-Forwarded-For", self.client_address[0]),
+            "ip": ip,
+            "country": self.headers.get("CF-IPCountry", "-"),
             "ua": self.headers.get("User-Agent", "-"),
             "ref": self.headers.get("Referer", "-"),
             "path": self.path,

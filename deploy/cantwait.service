@@ -1,0 +1,38 @@
+# systemd unit for the cantwaittoseeyouagain web server.
+#
+# Install:
+#   sudo cp deploy/cantwait.service /etc/systemd/system/cantwait.service
+#   # Edit User= and the paths below if your username or clone path differ.
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cantwait
+#
+# Tail logs:
+#   journalctl -u cantwait -f
+
+[Unit]
+Description=cantwaittoseeyouagain static site + visit logger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/cantwaittoseeyouagain
+# --host 127.0.0.1 because Cloudflare Tunnel connects from localhost.
+# --no-download skips the asset bootstrap (run `python3 server.py --setup-only`
+# once before starting the service, or drop your own files into assets/).
+ExecStart=/usr/bin/python3 /home/pi/cantwaittoseeyouagain/server.py --host 127.0.0.1 --port 8000 --no-download
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# Tighten the sandbox a bit — the server only needs to read the repo and
+# append to data/visits.log.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/cantwaittoseeyouagain/data
+
+[Install]
+WantedBy=multi-user.target

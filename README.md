@@ -64,13 +64,16 @@ tail -f data/visits.log
 
 ## Hosting on a Raspberry Pi
 
+For the production setup behind `cantwaittoseeyouagain.com` (Cloudflare
+Tunnel + systemd, no port forwarding), see **[DEPLOY.md](DEPLOY.md)**.
+
+Quick local-network test:
+
 1. `git clone` this repo onto the Pi.
 2. `python3 server.py --port 8000 &` (or use systemd / `screen` / `tmux`).
-3. Point your router or `/etc/hosts` at the Pi's IP. No real domain needed —
-   bookmark `http://<pi-ip>:8000`.
+3. Bookmark `http://<pi-ip>:8000` from another device on your LAN.
 
-For LAN-only access just leave `--host 0.0.0.0`. For a public address, expose
-through a reverse proxy or a tunnel of your choice.
+For LAN-only access leave `--host 0.0.0.0`. For a public address see DEPLOY.md.
 
 ## Progress is sticky
 
