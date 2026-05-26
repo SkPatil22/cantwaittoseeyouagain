@@ -1,8 +1,8 @@
-// Jigsaw puzzle with cookie-persisted progress.
+// Full-screen jigsaw puzzle with cookie-persisted progress.
 //
-// Pieces are drawn as SVG paths (interior rectangle + four jigsaw edges).
-// Edges are deterministic per seed so a reload reproduces the same layout.
-// Placement and seed live in a single cookie (`puzzle_state`).
+// Pieces are drawn as SVG paths (interior cell + four jigsaw edges) with a
+// subtle outline stroke. Edges are deterministic per seed so a reload
+// reproduces the same layout. Placement + seed live in a single cookie.
 
 const COLS = 6;
 const ROWS = 4;
@@ -10,7 +10,6 @@ const TAB_RATIO = 0.22;           // tab depth as fraction of min(pieceW, pieceH
 const SNAP_RATIO = 0.35;          // snap radius as fraction of min(pieceW, pieceH)
 const COOKIE_NAME = 'puzzle_state';
 const COOKIE_DAYS = 60;
-const PUZZLE_IMG = '/assets/puzzle.jpg';
 
 // -- tiny seeded PRNG (mulberry32) ----------------------------------------
 
@@ -73,10 +72,8 @@ function edgeSegment(from, to, edgeVal, r) {
     const ux = dx / L, uy = dy / L;
     const midX = (from[0] + to[0]) / 2;
     const midY = (from[1] + to[1]) / 2;
-    // Neck points along the edge, r either side of midpoint.
     const n1 = [midX - ux * r, midY - uy * r];
     const n2 = [midX + ux * r, midY + uy * r];
-    // sweep-flag: 1 for outward bulge (path going CW around piece), 0 for inward.
     const sweep = edgeVal > 0 ? 1 : 0;
     return `L ${n1[0].toFixed(2)} ${n1[1].toFixed(2)} ` +
            `A ${r} ${r} 0 0 ${sweep} ${n2[0].toFixed(2)} ${n2[1].toFixed(2)} ` +
@@ -85,7 +82,6 @@ function edgeSegment(from, to, edgeVal, r) {
 
 function buildPiecePath(W, H, T, edges) {
     const r = T;
-    // interior corners
     const TL = [T, T];
     const TR = [T + W, T];
     const BR = [T + W, T + H];
@@ -102,15 +98,15 @@ function buildPiecePath(W, H, T, edges) {
 // -- main class -----------------------------------------------------------
 
 export class JigsawPuzzle extends EventTarget {
-    constructor({ boardEl, piecesEl, resetBtn }) {
+    constructor({ boardEl, piecesEl, resetBtn, puzzleImg }) {
         super();
         this.board = boardEl;
         this.pieces = piecesEl;
         this.resetBtn = resetBtn;
+        this.puzzleImg = puzzleImg || '/assets/landscape-01.jpg';
         this.state = null;
         this.placedCount = 0;
         this.pieceEls = [];
-        this._suspendSave = false;
 
         if (this.resetBtn) {
             this.resetBtn.addEventListener('click', () => this.reset());
@@ -119,15 +115,13 @@ export class JigsawPuzzle extends EventTarget {
     }
 
     async init() {
-        await this._waitForImage(PUZZLE_IMG);
+        await this._waitForImage(this.puzzleImg);
         this._loadOrCreateState();
         this._layout();
-        this._renderBoard();
         this._createPieces();
         this._placeFromState();
         if (this.state.complete) {
             // Reload of a solved puzzle: surface the play button right away.
-            this.board.classList.add('solved');
             this.dispatchEvent(new Event('complete'));
         }
     }
@@ -154,8 +148,6 @@ export class JigsawPuzzle extends EventTarget {
     _freshState() {
         const seed = (Math.random() * 0xffffffff) >>> 0;
         const rng = mulberry32(seed);
-        // Interior edges. hEdges[r][c] is the edge between piece(r,c)'s bottom
-        // and piece(r+1,c)'s top, expressed from piece(r,c)'s perspective.
         const hEdges = [];
         for (let r = 0; r < ROWS - 1; r++) {
             const row = [];
@@ -168,8 +160,6 @@ export class JigsawPuzzle extends EventTarget {
             for (let c = 0; c < COLS - 1; c++) row.push(rng() < 0.5 ? 1 : -1);
             vEdges.push(row);
         }
-        // Scatter positions are stored as fractions of viewport so they
-        // survive resize gracefully.
         const scatter = [];
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
@@ -180,7 +170,6 @@ export class JigsawPuzzle extends EventTarget {
                 });
             }
         }
-        // Shuffle stacking order so pieces overlap unpredictably.
         for (let i = scatter.length - 1; i > 0; i--) {
             const j = Math.floor(rng() * (i + 1));
             [scatter[i], scatter[j]] = [scatter[j], scatter[i]];
@@ -204,83 +193,18 @@ export class JigsawPuzzle extends EventTarget {
     }
 
     _layout() {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        // Leave headroom around the puzzle so pieces can sit beside it.
-        const margin = Math.min(vw, vh) * 0.04;
-        const availW = vw - margin * 2;
-        const availH = vh * 0.78 - margin * 2;
-        const targetRatio = 16 / 9;
-        let boardW = availW;
-        let boardH = boardW / targetRatio;
-        if (boardH > availH) {
-            boardH = availH;
-            boardW = boardH * targetRatio;
-        }
-        // Cap so big monitors don't blow up piece sizes.
-        const maxW = 1280;
-        if (boardW > maxW) { boardW = maxW; boardH = boardW / targetRatio; }
-        this.boardW = Math.floor(boardW);
-        this.boardH = Math.floor(boardH);
+        // Puzzle fills the viewport edge-to-edge — the same surface the
+        // slideshow will later occupy.
+        this.boardW = window.innerWidth;
+        this.boardH = window.innerHeight;
         this.pieceW = this.boardW / COLS;
         this.pieceH = this.boardH / ROWS;
         this.tab = Math.min(this.pieceW, this.pieceH) * TAB_RATIO;
         this.board.style.width = this.boardW + 'px';
         this.board.style.height = this.boardH + 'px';
-    }
-
-    _renderBoard() {
-        // Interior cuts: ROWS-1 horizontal jigsaw lines + COLS-1 vertical jigsaw
-        // lines, each one a single open path with clear endpoints so the play-
-        // button erase animation can wipe them off "from one end to the other".
-        let svg = this.board.querySelector('#grid-lines');
-        if (!svg) {
-            svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('id', 'grid-lines');
-            svg.style.position = 'absolute';
-            svg.style.inset = '0';
-            this.board.appendChild(svg);
-        }
-        svg.setAttribute('width', this.boardW);
-        svg.setAttribute('height', this.boardH);
-        svg.setAttribute('viewBox', `0 0 ${this.boardW} ${this.boardH}`);
-        svg.innerHTML = '';
-
-        const T = this.tab;
-        // Horizontal cuts: between row r and row r+1.
-        // Note: edgeSegment's bulge sign is calibrated for the piece-outline
-        // traversal (which walks the bottom edge right-to-left). When we walk
-        // a horizontal cut left-to-right we invert the edge value so the cut
-        // bulges in the same on-screen direction as the matching piece edges.
-        for (let r = 0; r < ROWS - 1; r++) {
-            const y = (r + 1) * this.pieceH;
-            let d = `M 0 ${y} `;
-            for (let c = 0; c < COLS; c++) {
-                const from = [c * this.pieceW, y];
-                const to   = [(c + 1) * this.pieceW, y];
-                d += edgeSegment(from, to, -this.state.hEdges[r][c], T);
-            }
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', d);
-            path.dataset.kind = 'h';
-            path.dataset.r = r;
-            svg.appendChild(path);
-        }
-        // Vertical cuts: between col c and col c+1.
-        for (let c = 0; c < COLS - 1; c++) {
-            const x = (c + 1) * this.pieceW;
-            let d = `M ${x} 0 `;
-            for (let r = 0; r < ROWS; r++) {
-                const from = [x, r * this.pieceH];
-                const to   = [x, (r + 1) * this.pieceH];
-                d += edgeSegment(from, to, this.state.vEdges[r][c], T);
-            }
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', d);
-            path.dataset.kind = 'v';
-            path.dataset.c = c;
-            svg.appendChild(path);
-        }
+        this.board.style.left = '0';
+        this.board.style.top = '0';
+        this.board.style.transform = 'none';
     }
 
     _createPieces() {
@@ -326,12 +250,9 @@ export class JigsawPuzzle extends EventTarget {
         defs.appendChild(clip);
         svg.appendChild(defs);
 
-        // The image is sized to the full puzzle, positioned so the piece's
-        // interior cell shows the correct slice. The +/-T offset keeps the
-        // tab area filled with the neighbour's pixels (the jigsaw look).
         const img = document.createElementNS(svgNS, 'image');
-        img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', PUZZLE_IMG);
-        img.setAttribute('href', PUZZLE_IMG);
+        img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', this.puzzleImg);
+        img.setAttribute('href', this.puzzleImg);
         img.setAttribute('width', this.boardW);
         img.setAttribute('height', this.boardH);
         img.setAttribute('x', T - col * W);
@@ -340,12 +261,15 @@ export class JigsawPuzzle extends EventTarget {
         img.setAttribute('clip-path', `url(#${clipId})`);
         svg.appendChild(img);
 
-        // Subtle white edge stroke on the outline so pieces read against bg.
+        // Outline stroke — this is the only "line" visible between pieces and
+        // the one we wipe away in the play-button animation.
         const stroke = document.createElementNS(svgNS, 'path');
         stroke.setAttribute('d', d);
         stroke.setAttribute('fill', 'none');
-        stroke.setAttribute('stroke', 'rgba(255,255,255,0.18)');
+        stroke.setAttribute('stroke', 'rgba(255,255,255,0.22)');
         stroke.setAttribute('stroke-width', '1');
+        stroke.setAttribute('vector-effect', 'non-scaling-stroke');
+        stroke.classList.add('piece-stroke');
         svg.appendChild(stroke);
 
         div.appendChild(svg);
@@ -366,11 +290,10 @@ export class JigsawPuzzle extends EventTarget {
                 this._snapToTarget(el, row, col, boardRect);
                 this.placedCount++;
             } else {
-                // Convert frac → pixel, clamp so piece stays mostly on screen.
                 const canvasW = this.pieceW + 2 * this.tab;
                 const canvasH = this.pieceH + 2 * this.tab;
-                const x = meta.xFrac * (vw - canvasW);
-                const y = meta.yFrac * (vh - canvasH);
+                const x = meta.xFrac * Math.max(1, vw - canvasW);
+                const y = meta.yFrac * Math.max(1, vh - canvasH);
                 el.style.left = x + 'px';
                 el.style.top = y + 'px';
             }
@@ -382,8 +305,6 @@ export class JigsawPuzzle extends EventTarget {
     }
 
     _targetFor(row, col, boardRect) {
-        // Where the piece's HTML element's top-left should land so its
-        // interior cell aligns with the grid cell.
         return {
             x: boardRect.left + col * this.pieceW - this.tab,
             y: boardRect.top + row * this.pieceH - this.tab,
@@ -408,10 +329,7 @@ export class JigsawPuzzle extends EventTarget {
             pointerId = e.pointerId;
             try { el.setPointerCapture(pointerId); } catch {}
             el.classList.add('dragging');
-            // Disable any inherited transition so dragging stays 1:1 with the
-            // pointer (snap-back animation gets re-enabled on release).
             el.style.transition = 'none';
-            // Bring to front
             this.pieces.appendChild(el);
             const rect = el.getBoundingClientRect();
             origX = rect.left;
@@ -453,7 +371,6 @@ export class JigsawPuzzle extends EventTarget {
         const snap = Math.min(this.pieceW, this.pieceH) * SNAP_RATIO;
         const meta = this._stateFor(row, col);
         if (dist <= snap) {
-            // Smooth snap to slot.
             el.style.transition = 'left 0.28s cubic-bezier(0.3, 1.5, 0.6, 1), top 0.28s cubic-bezier(0.3, 1.5, 0.6, 1)';
             el.style.left = target.x + 'px';
             el.style.top = target.y + 'px';
@@ -465,15 +382,12 @@ export class JigsawPuzzle extends EventTarget {
                 if (this.placedCount >= ROWS * COLS) {
                     this.state.complete = true;
                     saveState(this.state);
-                    this.board.classList.add('solved');
-                    // small delay so the snap animation reads
                     setTimeout(() => this.dispatchEvent(new Event('complete')), 480);
                 } else {
                     saveState(this.state);
                 }
             }
         } else {
-            // store new scatter position as fractions
             const vw = window.innerWidth, vh = window.innerHeight;
             const canvasW = this.pieceW + 2 * this.tab;
             const canvasH = this.pieceH + 2 * this.tab;
@@ -498,22 +412,43 @@ export class JigsawPuzzle extends EventTarget {
     }
 
     _handleResize() {
-        // Recompute layout and reposition. Scatter positions follow fractions.
         this._layout();
-        this._renderBoard();
-        // Rebuild pieces so their geometry matches the new piece size.
-        const placedSet = new Set(
-            this.state.pieces.filter(p => p.placed).map(p => `${p.row},${p.col}`)
-        );
         this._createPieces();
-        // Restore placed/scatter from state
-        for (const el of this.pieceEls) {
-            const row = +el.dataset.row, col = +el.dataset.col;
-            if (placedSet.has(`${row},${col}`)) {
-                el.classList.add('placed');
-            }
-        }
         this._placeFromState();
+    }
+
+    // Cheat code: snap every remaining piece into place with a quick stagger
+    // so the "complete" event fires the same way as a real solve.
+    autocomplete() {
+        if (this.state.complete) return;
+        const boardRect = this.board.getBoundingClientRect();
+        const remaining = this.pieceEls.filter(el => !el.classList.contains('placed'));
+        if (!remaining.length) {
+            this.state.complete = true;
+            saveState(this.state);
+            this.dispatchEvent(new Event('complete'));
+            return;
+        }
+        const stepMs = 70;
+        remaining.forEach((el, i) => {
+            const row = +el.dataset.row, col = +el.dataset.col;
+            const target = this._targetFor(row, col, boardRect);
+            setTimeout(() => {
+                el.style.transition = 'left 0.55s cubic-bezier(0.3, 1.4, 0.5, 1), top 0.55s cubic-bezier(0.3, 1.4, 0.5, 1)';
+                el.style.left = target.x + 'px';
+                el.style.top = target.y + 'px';
+                el.classList.add('placed');
+                const meta = this._stateFor(row, col);
+                if (meta) meta.placed = true;
+                this.placedCount++;
+            }, i * stepMs);
+        });
+        const totalMs = remaining.length * stepMs + 650;
+        setTimeout(() => {
+            this.state.complete = true;
+            saveState(this.state);
+            this.dispatchEvent(new Event('complete'));
+        }, totalMs);
     }
 
     reset() {
@@ -522,17 +457,18 @@ export class JigsawPuzzle extends EventTarget {
         this.state = this._freshState();
         saveState(this.state);
         this.placedCount = 0;
-        this.board.classList.remove('solved');
-        this._renderBoard();
         this._createPieces();
         this._placeFromState();
-        // Hide any visible play overlay if shown
         this.dispatchEvent(new Event('reset'));
     }
 
-    // Used by app.js for the line-erase animation.
+    // Pieces' outline strokes — what we erase when play is pressed.
     gridLineEls() {
-        const svg = this.board.querySelector('#grid-lines');
-        return svg ? Array.from(svg.querySelectorAll('path')) : [];
+        const out = [];
+        for (const el of this.pieceEls) {
+            const stroke = el.querySelector('.piece-stroke');
+            if (stroke) out.push(stroke);
+        }
+        return out;
     }
 }

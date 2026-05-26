@@ -25,19 +25,28 @@ Open <http://localhost:8000>.
 
 ## Replacing the assets
 
-The puzzle uses one image; the slideshow uses ten. Drop your own files in
-with these exact names:
+The slideshow uses ten clips; the puzzle uses the first frame of clip #1
+(extracted in the browser if it's a video, used directly if it's an image).
+Drop your own files in with these exact names:
 
 ```
-assets/puzzle.jpg          # the photo that becomes the puzzle (1920×1080+)
-assets/landscape-01.jpg    # slideshow #1
-assets/landscape-02.jpg    # ... through landscape-10
+assets/landscape-01.jpg    # slideshow #1 — also becomes the puzzle image
+assets/landscape-02.jpg    # ...
 ...
 assets/landscape-10.jpg
 ```
 
-The slideshow also accepts video — name them `.mp4`/`.webm`/`.mov` and edit
-the list in `static/slideshow.js` to point at the new extensions.
+Video works too — name them `.mp4`/`.webm`/`.mov` and update the list in
+`static/slideshow.js`. The slideshow hard-cuts between clips (no fades).
+
+## Controls
+
+- **`reset`** chip (bottom-right while solving) — clear progress and
+  re-scatter.
+- **type `again`** — autocomplete the puzzle (handy for testing the play
+  → slideshow transition).
+- **pause/play chip** (bottom-right during the slideshow) — freeze on the
+  current clip; click again to resume.
 
 ## Visit log
 

@@ -1,7 +1,7 @@
-// Slideshow that cycles through landscape images (or videos) and re-themes
-// the overlay text on each transition.
+// Slideshow with hard cuts between clips, pause/resume, and a helper for
+// pulling the first frame of a video as a still image (used by the puzzle).
 
-const LANDSCAPES = [
+export const LANDSCAPES = [
     '/assets/landscape-01.jpg',
     '/assets/landscape-02.jpg',
     '/assets/landscape-03.jpg',
@@ -14,7 +14,56 @@ const LANDSCAPES = [
     '/assets/landscape-10.jpg',
 ];
 
-// Curated "normal" fonts — all loaded via Google Fonts in index.html.
+export function isVideoSrc(src) {
+    return /\.(mp4|webm|mov)(\?|$)/i.test(src);
+}
+
+// Decode the first frame of a video and return a jpeg data URL. Used to give
+// the puzzle a still that exactly matches the slideshow's opening clip.
+export function extractFirstFrame(src) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.src = src;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        let done = false;
+        const cleanup = () => {
+            video.removeAttribute('src');
+            try { video.load(); } catch {}
+        };
+        const grab = () => {
+            if (done) return;
+            done = true;
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth || 1920;
+                canvas.height = video.videoHeight || 1080;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const url = canvas.toDataURL('image/jpeg', 0.92);
+                cleanup();
+                resolve(url);
+            } catch (e) {
+                cleanup();
+                reject(e);
+            }
+        };
+        video.addEventListener('loadeddata', () => {
+            // Force a seek so `seeked` fires and the frame is committed.
+            try { video.currentTime = Math.min(0.01, (video.duration || 1) - 0.001); }
+            catch { grab(); }
+        });
+        video.addEventListener('seeked', grab);
+        video.addEventListener('error', () => {
+            cleanup();
+            reject(new Error(`video load failed: ${src}`));
+        });
+        setTimeout(() => {
+            if (!done) { cleanup(); reject(new Error('first-frame timeout')); }
+        }, 8000);
+    });
+}
+
 const FONTS = [
     "'Playfair Display', serif",
     "'Cormorant Garamond', serif",
@@ -27,8 +76,6 @@ const FONTS = [
     "'Manrope', sans-serif",
 ];
 
-// Colors that sit close to a landscape palette but stay legible with the
-// vignette + text-shadow defined in CSS.
 const COLORS = [
     '#f6e7c8',  // warm cream
     '#dfeae0',  // soft sage
@@ -43,7 +90,7 @@ const COLORS = [
 ];
 
 export class Slideshow {
-    constructor({ mediaEl, againEl, addressEl, timeEl, interval = 5000 }) {
+    constructor({ mediaEl, againEl, addressEl, timeEl, interval = 5500 }) {
         this.media = mediaEl;
         this.again = againEl;
         this.address = addressEl;
@@ -53,15 +100,15 @@ export class Slideshow {
         this.elements = [];
         this.timer = null;
         this.lastFont = null;
+        this.paused = false;
     }
 
     _build() {
         this.media.innerHTML = '';
         this.elements = [];
         for (const src of LANDSCAPES) {
-            const isVideo = /\.(mp4|webm|mov)$/i.test(src);
             let el;
-            if (isVideo) {
+            if (isVideoSrc(src)) {
                 el = document.createElement('video');
                 el.src = src;
                 el.muted = true;
@@ -83,7 +130,30 @@ export class Slideshow {
     start() {
         this._build();
         this._advance();
-        this.timer = setInterval(() => this._advance(), this.interval);
+        this._scheduleNext();
+    }
+
+    _scheduleNext() {
+        if (this.timer) clearInterval(this.timer);
+        this.timer = setInterval(() => {
+            if (!this.paused) this._advance();
+        }, this.interval);
+    }
+
+    pause() {
+        this.paused = true;
+        const cur = this.elements[this.idx];
+        if (cur && cur.tagName === 'VIDEO') {
+            try { cur.pause(); } catch {}
+        }
+    }
+
+    resume() {
+        this.paused = false;
+        const cur = this.elements[this.idx];
+        if (cur && cur.tagName === 'VIDEO') {
+            try { cur.play(); } catch {}
+        }
     }
 
     stop() {
@@ -102,24 +172,21 @@ export class Slideshow {
         this.idx = (this.idx + 1) % this.elements.length;
         const next = this.elements[this.idx];
         const prevEl = prev >= 0 ? this.elements[prev] : null;
+        // Hard cut: hide previous instantly, show next instantly.
+        if (prevEl && prevEl !== next) {
+            prevEl.classList.remove('active');
+            if (prevEl.tagName === 'VIDEO') {
+                try { prevEl.pause(); prevEl.currentTime = 0; } catch {}
+            }
+        }
         next.classList.add('active');
         if (next.tagName === 'VIDEO') {
             try { next.currentTime = 0; next.play(); } catch {}
-        }
-        if (prevEl && prevEl !== next) {
-            // Slight delay before deactivating so cross-fade overlaps.
-            setTimeout(() => {
-                prevEl.classList.remove('active');
-                if (prevEl.tagName === 'VIDEO') {
-                    try { prevEl.pause(); } catch {}
-                }
-            }, 1400);
         }
         this._restyleText();
     }
 
     _restyleText() {
-        // Pick a font that's different from the last shown.
         let font;
         do {
             font = FONTS[Math.floor(Math.random() * FONTS.length)];

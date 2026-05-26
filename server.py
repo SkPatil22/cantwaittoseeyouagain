@@ -31,7 +31,6 @@ VISITS_LOG = DATA / "visits.log"
 
 # Curated Picsum IDs that point at landscape-style photos. If any of these
 # go missing upstream you can replace the files in assets/ by hand.
-PUZZLE_ID = 1018  # the photo that becomes the puzzle
 LANDSCAPE_IDS = [
     1015, 1019, 1036, 1039, 1043, 1058, 1067, 1073, 110, 1025,
 ]
@@ -52,15 +51,13 @@ def _download(url: str, dest: Path) -> bool:
 
 
 def bootstrap_assets() -> None:
-    """Download sample images if assets are missing. Idempotent."""
+    """Download sample images if assets are missing. Idempotent.
+
+    The puzzle uses the first slideshow clip directly (first frame extracted
+    in the browser when it's a video), so we only need the ten landscape
+    files — no separate puzzle image.
+    """
     ASSETS.mkdir(exist_ok=True)
-    puzzle = ASSETS / "puzzle.jpg"
-    if not puzzle.exists():
-        url = f"https://picsum.photos/id/{PUZZLE_ID}/{WIDTH}/{HEIGHT}"
-        print(f"Downloading puzzle image -> {puzzle.name}")
-        if not _download(url, puzzle):
-            print(f"  drop your own {WIDTH}x{HEIGHT} jpg at {puzzle}",
-                  file=sys.stderr)
     for i, pid in enumerate(LANDSCAPE_IDS, start=1):
         f = ASSETS / f"landscape-{i:02d}.jpg"
         if f.exists():

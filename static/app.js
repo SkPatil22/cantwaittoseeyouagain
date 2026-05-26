@@ -1,99 +1,149 @@
-// Coordinator: wires the jigsaw puzzle, the play-button reveal, the
+// Coordinator: figures out the puzzle image (first frame of the first
+// slideshow clip when it's a video), wires the play-button reveal, the
 // line-erase animation, and the slideshow + cycling text.
 
 import { JigsawPuzzle } from '/static/puzzle.js';
-import { Slideshow } from '/static/slideshow.js';
+import { Slideshow, LANDSCAPES, isVideoSrc, extractFirstFrame } from '/static/slideshow.js';
 
 const $ = (sel) => document.querySelector(sel);
 
-const board     = $('#puzzle-board');
-const pieces    = $('#pieces-container');
-const resetBtn  = $('#reset-button');
-const puzzleLay = $('#puzzle-layer');
-const playLay   = $('#play-overlay');
-const playBtn   = $('#play-button');
-const slidesLay = $('#slideshow');
-const mediaEl   = $('#media-stage');
-const againEl   = $('#again');
-const addrEl    = $('#address');
-const timeEl    = $('#time');
+const board      = $('#puzzle-board');
+const pieces     = $('#pieces-container');
+const resetBtn   = $('#reset-button');
+const puzzleLay  = $('#puzzle-layer');
+const playLay    = $('#play-overlay');
+const playBtn    = $('#play-button');
+const slidesLay  = $('#slideshow');
+const mediaEl    = $('#media-stage');
+const againEl    = $('#again');
+const addrEl     = $('#address');
+const timeEl     = $('#time');
+const ssToggle   = $('#slideshow-toggle');
 
-const puzzle = new JigsawPuzzle({ boardEl: board, piecesEl: pieces, resetBtn });
 const slides = new Slideshow({
     mediaEl, againEl, addressEl: addrEl, timeEl: timeEl, interval: 5500,
 });
 
+let puzzle = null;
 let playArmed = false;
 
-puzzle.addEventListener('complete', () => {
+async function resolvePuzzleImage() {
+    const first = LANDSCAPES[0];
+    if (isVideoSrc(first)) {
+        try {
+            return await extractFirstFrame(first);
+        } catch (err) {
+            console.warn('first-frame extract failed, falling back', err);
+        }
+    }
+    return first;
+}
+
+(async () => {
+    const puzzleImg = await resolvePuzzleImage();
+    puzzle = new JigsawPuzzle({
+        boardEl: board, piecesEl: pieces, resetBtn, puzzleImg,
+    });
+    puzzle.addEventListener('complete', onComplete);
+    puzzle.addEventListener('reset', onReset);
+    try { await puzzle.init(); }
+    catch (err) { console.error('puzzle init failed', err); }
+})();
+
+function onComplete() {
     playArmed = true;
     playLay.classList.add('visible');
     playLay.setAttribute('aria-hidden', 'false');
-});
+}
 
-puzzle.addEventListener('reset', () => {
+function onReset() {
     playArmed = false;
     playLay.classList.remove('visible');
     playLay.setAttribute('aria-hidden', 'true');
     slidesLay.classList.remove('visible');
     slidesLay.setAttribute('aria-hidden', 'true');
+    ssToggle.classList.remove('visible');
     puzzleLay.classList.remove('fading');
+    puzzleLay.style.display = '';
+    resetBtn.classList.remove('hidden');
     againEl.classList.remove('visible');
     addrEl.classList.remove('visible');
     timeEl.classList.remove('visible');
     slides.stop();
-});
+}
 
 playBtn.addEventListener('click', async () => {
     if (!playArmed) return;
     playArmed = false;
     playBtn.disabled = true;
-    // 1) Hide the play button itself.
     playLay.classList.remove('visible');
     playLay.setAttribute('aria-hidden', 'true');
-    // 2) Wipe the puzzle lines from one end to the other, randomized.
-    await eraseGridLines(puzzle.gridLineEls());
-    // 3) Crossfade puzzle layer out while slideshow fades in.
+    resetBtn.classList.add('hidden');
+
+    await eraseLines(puzzle.gridLineEls());
+
     slidesLay.classList.add('visible');
     slidesLay.setAttribute('aria-hidden', 'false');
     slides.start();
+    ssToggle.classList.add('visible');
     puzzleLay.classList.add('fading');
-    // 4) Once the slideshow is visible, reveal the overlay text.
     setTimeout(() => slides.revealText(), 900);
-    // 5) After the puzzle fade completes, take it out of the layout entirely.
     setTimeout(() => { puzzleLay.style.display = 'none'; }, 1300);
 });
 
-async function eraseGridLines(paths) {
+// Each piece's outline is a closed jigsaw loop. Setting stroke-dasharray to
+// its length and animating dashoffset toward that length wipes the stroke
+// away "from one end to the other" along the path direction.
+async function eraseLines(paths) {
     if (!paths.length) return;
     const shuffled = paths.slice();
     for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    const totalDuration = 2200; // ms for a single line wipe
-    const staggerStep   = 180;
-    const tasks = shuffled.map((path, i) => new Promise((resolve) => {
-        const len = path.getTotalLength();
-        path.style.strokeDasharray  = len;
-        path.style.strokeDashoffset = '0';
-        // Force reflow so the transition starts from the dashoffset=0 frame.
-        // eslint-disable-next-line no-unused-expressions
-        path.getBoundingClientRect();
-        const delay = i * staggerStep;
-        path.style.transition =
-            `stroke-dashoffset ${totalDuration}ms cubic-bezier(.6,.05,.3,1) ${delay}ms,` +
-            ` opacity ${totalDuration}ms linear ${delay}ms`;
-        // Direction: 50/50 wipe from start or wipe from end.
-        const fromStart = Math.random() < 0.5;
-        path.style.strokeDashoffset = fromStart ? `${len}` : `${-len}`;
-        path.style.opacity = '0';
-        setTimeout(resolve, delay + totalDuration);
+    const wipeMs   = 1400;
+    const stepMs   = 70;
+    const tasks = shuffled.map((p, i) => new Promise((resolve) => {
+        const len = p.getTotalLength();
+        p.style.strokeDasharray  = len;
+        p.style.strokeDashoffset = '0';
+        p.getBoundingClientRect();  // force commit
+        const delay = i * stepMs;
+        p.style.transition =
+            `stroke-dashoffset ${wipeMs}ms cubic-bezier(.6,.05,.3,1) ${delay}ms,` +
+            ` opacity ${wipeMs}ms linear ${delay}ms`;
+        const dir = Math.random() < 0.5 ? len : -len;
+        p.style.strokeDashoffset = dir;
+        p.style.opacity = '0';
+        setTimeout(resolve, delay + wipeMs);
     }));
     await Promise.all(tasks);
 }
 
-// Kick off
-puzzle.init().catch((err) => {
-    console.error('puzzle init failed', err);
+// "again" cheat code: type those five letters anywhere to autocomplete.
+{
+    let buf = '';
+    window.addEventListener('keydown', (e) => {
+        if (!e.key || e.key.length !== 1) return;
+        const k = e.key.toLowerCase();
+        if (!/[a-z]/.test(k)) return;
+        buf = (buf + k).slice(-5);
+        if (buf === 'again' && puzzle && !playArmed) {
+            buf = '';
+            puzzle.autocomplete();
+        }
+    });
+}
+
+// Slideshow play/pause toggle (bottom-right while cycling)
+ssToggle.addEventListener('click', () => {
+    if (slides.paused) {
+        slides.resume();
+        ssToggle.classList.remove('paused');
+        ssToggle.setAttribute('aria-label', 'pause');
+    } else {
+        slides.pause();
+        ssToggle.classList.add('paused');
+        ssToggle.setAttribute('aria-label', 'play');
+    }
 });
