@@ -23,3 +23,6 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# claude code local preview config
+.claude/

@@ -5,6 +5,13 @@
 //  - per-clip text color sampled from the video's current frame, then
 //    pushed toward a light, vivid value that reads against any background
 //
+// Implementation uses exactly two <video> elements as a front/back double
+// buffer. The browser only decodes ~4-6 videos concurrently — instantiating
+// one element per clip (as the original code did) silently leaves most at
+// readyState 0, which paints as a black screen and makes the color sampler
+// read pure black. Two elements keeps us well under any decoder cap and
+// lets us preload the upcoming clip while the current one plays.
+//
 // No image fallback. Drop any .mp4/.webm/.mov file into assets/ — filenames
 // don't matter; the server lists them via /api/media.
 
@@ -140,6 +147,10 @@ function hslCss(h, s, l) {
 // Sample the visible video element, return a CSS color that reads on top of
 // it: same hue family ("similar to background"), high lightness + decent
 // saturation ("sticks out"), with the vignette + text-shadow as a safety net.
+//
+// Returns null if the canvas read came back fully black — in that case the
+// video frame hadn't actually been presented yet and we'd just produce the
+// "black → pink" fallback every time. Caller can retry on a later frame.
 function pickTextColor(videoEl) {
     try {
         const w = 32, h = 18;
@@ -148,10 +159,14 @@ function pickTextColor(videoEl) {
         const ctx = c.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(videoEl, 0, 0, w, h);
         const px = ctx.getImageData(0, 0, w, h).data;
-        let r = 0, g = 0, b = 0, n = 0;
+        let r = 0, g = 0, b = 0, n = 0, maxCh = 0;
         for (let i = 0; i < px.length; i += 4) {
             r += px[i]; g += px[i + 1]; b += px[i + 2]; n++;
+            if (px[i] > maxCh) maxCh = px[i];
+            if (px[i + 1] > maxCh) maxCh = px[i + 1];
+            if (px[i + 2] > maxCh) maxCh = px[i + 2];
         }
+        if (maxCh < 8) return null;   // canvas read was effectively black
         r /= n; g /= n; b /= n;
         const [h0, s0, l0] = rgbToHsl(r, g, b);
         // Push toward warm, light, lightly saturated — readable on most clips.
@@ -188,48 +203,81 @@ export class Slideshow {
         this.textEls = [againEl, addressEl, dateEl, timeEl].filter(Boolean);
         this.mediaList = mediaList || [];
         this.interval = interval;
-        this.elements = [];
         this.timer = null;
         this.lastFont = null;
         this.paused = false;
+        this.front = null;   // currently visible buffer
+        this.back  = null;   // preloads the upcoming clip
         // Restore the previous random ordering if one matches our list length,
         // otherwise mint a fresh permutation.
         const existing = loadOrder(this.mediaList.length);
         if (existing) {
             this.order = existing.order;
             this.pos = existing.pos;
-            this._resuming = true;
         } else {
             this.order = shuffleIndices(this.mediaList.length);
             this.pos = -1;
-            this._resuming = false;
             this._persist();
         }
+        // Build the two buffers immediately and start warming them. The user
+        // still has to solve the puzzle before the slideshow becomes visible,
+        // which gives the first clip plenty of time to fully load.
+        this._buildBuffers();
     }
 
     _persist() {
         saveOrder({ order: this.order, pos: this.pos });
     }
 
-    _build() {
+    _mkVideo() {
+        const v = document.createElement('video');
+        v.muted = true;
+        v.loop = false;
+        v.playsInline = true;
+        v.preload = 'auto';
+        return v;
+    }
+
+    _buildBuffers() {
+        if (!this.media) return;
         this.media.innerHTML = '';
-        this.elements = [];
-        for (const src of this.mediaList) {
-            // Video-only. If somebody slips a non-video URL into the list it
-            // simply won't render — clearer than silently falling back.
-            const el = document.createElement('video');
-            el.src = src;
-            el.muted = true;
-            el.loop = false;
-            el.playsInline = true;
-            el.preload = 'auto';
-            this.elements.push(el);
-            this.media.appendChild(el);
+        this.front = this._mkVideo();
+        this.back  = this._mkVideo();
+        this.media.appendChild(this.front);
+        this.media.appendChild(this.back);
+        // Preload the next two clips into front + back so by the time the
+        // slideshow becomes visible, the first frame is ready to paint.
+        const firstSrc = this._upcomingSrc(0);
+        const secondSrc = this._upcomingSrc(1);
+        this._loadInto(this.front, firstSrc);
+        if (secondSrc && secondSrc !== firstSrc) this._loadInto(this.back, secondSrc);
+    }
+
+    // What URL will be shown `offset` advances from now? offset=0 means the
+    // very next call to _advance, offset=1 the one after that.
+    _upcomingSrc(offset) {
+        if (!this.mediaList.length) return null;
+        let p = this.pos + 1 + offset;
+        if (p >= this.order.length) {
+            // We don't know what the post-reshuffle order will be; the actual
+            // wrap will fix this up. Returning anything valid is fine — the
+            // miss is detected on _advance and we just load on demand.
+            p = p % this.order.length;
         }
+        return this.mediaList[this.order[p]];
+    }
+
+    _loadInto(videoEl, src) {
+        if (!videoEl || !src) return;
+        if (videoEl.dataset.src === src) return;   // already loading / loaded
+        videoEl.dataset.src = src;
+        videoEl.src = src;
+        try { videoEl.load(); } catch {}
     }
 
     start() {
-        this._build();
+        // _buildBuffers ran in the constructor; the front buffer is already
+        // primed with the first clip. Just kick off playback.
         this._advance();
         this._scheduleNext();
     }
@@ -243,14 +291,12 @@ export class Slideshow {
 
     pause() {
         this.paused = true;
-        const cur = this.elements[this.order[this.pos]];
-        if (cur) try { cur.pause(); } catch {}
+        if (this.front) try { this.front.pause(); } catch {}
     }
 
     resume() {
         this.paused = false;
-        const cur = this.elements[this.order[this.pos]];
-        if (cur) try { cur.play(); } catch {}
+        if (this.front) try { this.front.play(); } catch {}
     }
 
     stop() {
@@ -263,7 +309,7 @@ export class Slideshow {
     }
 
     _advance() {
-        const prevSlot = this.pos;
+        const isFirst = this.pos < 0;
         let nextPos = this.pos + 1;
         if (nextPos >= this.order.length) {
             // Deck exhausted — shuffle a fresh ordering and restart.
@@ -273,36 +319,90 @@ export class Slideshow {
         this.pos = nextPos;
         this._persist();
 
-        const prevEl = prevSlot >= 0 ? this.elements[this.order[prevSlot]] : null;
-        const next   = this.elements[this.order[this.pos]];
-        if (prevEl && prevEl !== next) {
-            prevEl.classList.remove('active');
-            try { prevEl.pause(); prevEl.currentTime = 0; } catch {}
-        }
-        next.classList.add('active');
-        try { next.currentTime = 0; next.play(); } catch {}
+        const nextSrc = this.mediaList[this.order[this.pos]];
 
-        // Color sample once the GPU actually has the frame painted.
-        // readyState 2 (HAVE_CURRENT_DATA) is theoretically enough but in
-        // practice drawImage() returns a black frame until `canplay` /
-        // `playing` fires. Listen for both; if neither shows up within
-        // 1500ms fall back to sampling anyway so the text isn't stuck on
-        // the prior video's color.
-        let sampled = false;
-        const sample = () => {
-            if (sampled) return;
-            sampled = true;
-            const color = pickTextColor(next);
-            this._restyleText(color);
-        };
-        const queue = () => requestAnimationFrame(sample);
-        if (next.readyState >= 3) {
-            queue();
+        // Pick which buffer will become the front. Three cases:
+        //   1. Very first call — front already loaded in the constructor.
+        //   2. Back buffer is already preloading the right clip — swap.
+        //   3. Deck just wrapped (or any other mismatch) — load on demand
+        //      into whichever buffer isn't currently front.
+        let nextEl;
+        if (isFirst) {
+            // Make sure the front actually has the first clip (it should,
+            // from _buildBuffers, but a deck reshuffle on the very first
+            // advance could move things).
+            this._loadInto(this.front, nextSrc);
+            nextEl = this.front;
+        } else if (this.back.dataset.src === nextSrc) {
+            // Swap front <-> back. The new front already has the upcoming
+            // clip preloaded; the old front becomes the new back.
+            const oldFront = this.front;
+            this.front = this.back;
+            this.back  = oldFront;
+            oldFront.classList.remove('active');
+            try { oldFront.pause(); oldFront.currentTime = 0; } catch {}
+            nextEl = this.front;
         } else {
-            next.addEventListener('canplay', queue, { once: true });
-            next.addEventListener('playing', queue, { once: true });
-            setTimeout(queue, 1500);
+            // Mismatch (deck wrapped, or back failed to preload). Load on
+            // demand into the back, then promote it.
+            this._loadInto(this.back, nextSrc);
+            const oldFront = this.front;
+            this.front = this.back;
+            this.back  = oldFront;
+            oldFront.classList.remove('active');
+            try { oldFront.pause(); oldFront.currentTime = 0; } catch {}
+            nextEl = this.front;
         }
+
+        nextEl.classList.add('active');
+        try { nextEl.currentTime = 0; } catch {}
+        const playPromise = nextEl.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});   // muted autoplay can still reject on some browsers
+        }
+
+        // Sample text color only after an actual frame is presented to the
+        // compositor. requestVideoFrameCallback is the only signal that
+        // guarantees the canvas read will return real pixels; `canplay` /
+        // `playing` can fire before the first paint, especially after a seek.
+        this._sampleOnPaint(nextEl);
+
+        // Warm up the *next* upcoming clip in the now-back buffer.
+        const upcomingSrc = this._upcomingSrc(0);
+        if (upcomingSrc && upcomingSrc !== nextSrc) {
+            this._loadInto(this.back, upcomingSrc);
+        }
+    }
+
+    _sampleOnPaint(videoEl) {
+        let attempts = 0;
+        const trySample = () => {
+            attempts++;
+            const color = pickTextColor(videoEl);
+            if (color) {
+                this._restyleText(color);
+                return;
+            }
+            // Canvas read came back black — frame not actually painted yet.
+            // Retry on the next presented frame (up to a few times).
+            if (attempts < 6) scheduleFrame();
+        };
+        const scheduleFrame = () => {
+            if (typeof videoEl.requestVideoFrameCallback === 'function') {
+                videoEl.requestVideoFrameCallback(() => trySample());
+            } else {
+                // Fallback path: double-rAF after readiness so the compositor
+                // has had at least one frame budget to present the new src.
+                const queued = () => requestAnimationFrame(() => requestAnimationFrame(trySample));
+                if (videoEl.readyState >= 3) queued();
+                else {
+                    videoEl.addEventListener('canplay', queued, { once: true });
+                    videoEl.addEventListener('playing', queued, { once: true });
+                    setTimeout(queued, 1500);
+                }
+            }
+        };
+        scheduleFrame();
     }
 
     _restyleText(color) {
