@@ -16,9 +16,9 @@ import argparse
 import datetime
 import http.server
 import json
-import re
 import socketserver
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -28,20 +28,24 @@ VISITS_LOG = DATA / "visits.log"
 
 # Video-only. Drop images and the page just has nothing for that slot.
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
-LANDSCAPE_RE = re.compile(r"^landscape-\d+\.[a-z0-9]+$", re.IGNORECASE)
 
 def list_media() -> list[str]:
-    """Return URL paths for landscape-NN.<video-ext> files in assets/,
-    sorted by name. Video-only — non-video files are ignored."""
+    """Return URL paths for every video file in assets/, sorted by name.
+
+    Any filename works — names don't have to match a special pattern.
+    Hidden files (.DS_Store etc.) and non-video extensions are skipped.
+    """
     if not ASSETS.exists():
         return []
     out: list[str] = []
     for f in sorted(ASSETS.iterdir()):
-        if not f.is_file() or not LANDSCAPE_RE.match(f.name):
+        if not f.is_file() or f.name.startswith("."):
             continue
         if f.suffix.lower() not in VIDEO_EXTS:
             continue
-        out.append(f"/assets/{f.name}")
+        # Percent-encode so filenames with spaces / special chars work
+        # whether the client decides to encode on its own or not.
+        out.append(f"/assets/{urllib.parse.quote(f.name)}")
     return out
 
 

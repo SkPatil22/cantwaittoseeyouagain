@@ -5,7 +5,8 @@ fetch_clips.py — pull a Pexels user's liked videos into assets/.
 Defaults to scraping https://www.pexels.com/@sachet-patil-2161866708/likes/
 — override with --likes-from <url>. For each Pexels video ID found on the
 page, the script calls the Pexels REST API to get the best mp4 download URL
-and saves the file at assets/landscape-NN.mp4 (sequential, in scrape order).
+and saves the file at assets/pexels-<id>.mp4. The slideshow accepts any
+video filename, so you can mix these with your own clips freely.
 
 You need a free Pexels API key:
   1. https://www.pexels.com/api/  →  Get Started
@@ -20,12 +21,11 @@ Flags:
   --likes-from URL       Pexels likes page to scrape
                          (default: the URL above)
   --pexels-key KEY       API key (overrides env / .env)
-  --force                re-download even if a slot is already filled
+  --force                re-download even if a pexels-<id>.mp4 already exists
   --max N                stop after N clips (default: no limit)
   --skip N               skip the first N scraped clips
-  --rename               also clear any existing landscape-*.mp4 in assets/
-                         before downloading (so slot numbers align with the
-                         freshly-scraped order)
+  --reset                delete every existing pexels-*.mp4 in assets/ first
+                         (does not touch files you put there yourself)
 
 Disk: budget ~10–15 MB per clip at 1080p.
 """
@@ -178,12 +178,14 @@ def resolve_key(cli_value: str) -> str:
 
 # ---------- driver ------------------------------------------------------
 
-def clear_existing_clips() -> int:
+def clear_fetched_clips() -> int:
+    """Delete only files this fetcher created (pexels-<id>.mp4)."""
     n = 0
     if not ASSETS.exists():
         return 0
     for f in ASSETS.iterdir():
-        if f.is_file() and f.suffix.lower() in VIDEO_EXTS and f.name.startswith("landscape-"):
+        if (f.is_file() and f.name.startswith("pexels-")
+                and f.suffix.lower() in VIDEO_EXTS):
             f.unlink()
             n += 1
     return n
@@ -205,9 +207,9 @@ def main() -> int:
                     help="stop after N clips (0 = no limit)")
     ap.add_argument("--skip", type=int, default=0,
                     help="skip the first N scraped clips")
-    ap.add_argument("--rename", action="store_true",
-                    help="delete existing landscape-*.mp4 first so slot "
-                         "numbers match the freshly-scraped order")
+    ap.add_argument("--reset", action="store_true",
+                    help="delete every existing pexels-*.mp4 in assets/ first "
+                         "(does not touch files you put there yourself)")
     args = ap.parse_args()
 
     key = resolve_key(args.pexels_key)
@@ -220,10 +222,10 @@ def main() -> int:
 
     ASSETS.mkdir(exist_ok=True)
 
-    if args.rename:
-        wiped = clear_existing_clips()
+    if args.reset:
+        wiped = clear_fetched_clips()
         if wiped:
-            print(f"wiped {wiped} existing landscape-*.mp4 file(s)")
+            print(f"wiped {wiped} existing pexels-*.mp4 file(s)")
 
     print(f"scraping {args.likes_from}")
     try:
@@ -247,16 +249,15 @@ def main() -> int:
     print(f"found {len(ids)} video(s); downloading to assets/")
     ok, skipped, failed = 0, 0, []
     for i, vid in enumerate(ids, start=1):
-        slot = i
-        dest = ASSETS / f"landscape-{slot:02d}.mp4"
-        prefix = f"slot {slot:02d} (#{vid})"
+        dest = ASSETS / f"pexels-{vid}.mp4"
+        prefix = f"[{i:02d}/{len(ids)}] pexels-{vid}"
         if dest.exists() and not args.force:
             print(f"{prefix}: present, skip")
             skipped += 1
             continue
         try:
             url = fetch_pexels_video_url(vid, key)
-            short = url[:78] + ("..." if len(url) > 78 else "")
+            short = url[:72] + ("..." if len(url) > 72 else "")
             print(f"{prefix}: {short}", flush=True)
             n = _download(url, dest)
             print(f"           wrote {dest.name} ({n / 1024 / 1024:.1f} MB)")
@@ -264,14 +265,14 @@ def main() -> int:
         except (urllib.error.URLError, urllib.error.HTTPError,
                 ssl.SSLError, json.JSONDecodeError, RuntimeError) as e:
             print(f"           FAILED: {e}")
-            failed.append((slot, vid, str(e)))
+            failed.append((vid, str(e)))
 
     print()
     print(f"done. {ok} downloaded, {skipped} skipped, {len(failed)} failed.")
     if failed:
         print("misses:")
-        for slot, vid, why in failed:
-            print(f"  slot {slot:02d}  video #{vid}  {why}")
+        for vid, why in failed:
+            print(f"  pexels-{vid}  {why}")
     return 0 if not failed else 1
 
 

@@ -31,19 +31,22 @@ will play (extracted in the browser via canvas — no ffmpeg needed), so
 the puzzle ↔ slideshow handoff is a seamless still-to-motion fade.
 
 ```
-assets/landscape-01.mp4
-assets/landscape-02.mp4
+assets/anything-you-want.mp4
+assets/IMG_1234.mov
+assets/pexels-12345.mp4
 ...
-assets/landscape-NN.mp4    # any count works
 ```
 
-The server lists whatever's in `assets/` at runtime via `/api/media` —
-no code edit needed when you add/remove/rename clips.
+**Filenames don't matter.** Drop any video into `assets/` and it gets
+played. The server lists whatever's there at runtime via `/api/media`,
+sorted alphabetically. Hidden files (`.DS_Store` etc.) and non-video
+extensions are skipped.
 
 ### Pull from a Pexels likes page
 
 `tools/fetch_clips.py` scrapes any public Pexels likes page (default:
-the maintainer's), then API-fetches each video's best mp4.
+the maintainer's), then API-fetches each video's best mp4 and saves it
+as `assets/pexels-<id>.mp4`.
 
 ```sh
 # 1. Get a free Pexels API key at https://www.pexels.com/api/ (no card)
@@ -58,16 +61,23 @@ python3 tools/fetch_clips.py
 python3 tools/fetch_clips.py --likes-from https://www.pexels.com/@someone/likes/
 
 # Useful flags:
-#   --rename   wipe existing assets/landscape-*.mp4 first (clean numbering)
+#   --reset    delete every existing pexels-*.mp4 first (leaves your own files alone)
 #   --max 30   stop after 30 clips
-#   --force    re-download even if slot already filled
+#   --force    re-download even if the file already exists
 ```
 
-Slots are numbered sequentially in the order Pexels returns them on the
-page (`landscape-01.mp4`, `landscape-02.mp4`, …). The slideshow plays
-them in a **random order** stored in a cookie (`slideshow_order`) so the
-ordering is stable across reloads and never repeats a clip until the
-deck is exhausted, at which point a fresh shuffle starts.
+The fetcher names files by Pexels video ID (`pexels-12345.mp4`), so
+re-running it just adds new likes and skips ones already on disk. Your
+own files dropped into `assets/` with any name are untouched.
+
+### Play order
+
+The slideshow plays clips in a **random order** stored in a cookie
+(`slideshow_order`). Each clip plays exactly once before any repeats; at
+the end of a cycle a fresh shuffle is generated. The order survives
+reloads — refreshing in the middle of the slideshow picks up where it
+left off. Add or remove clips from `assets/` and the cookie self-
+invalidates (length mismatch), so the next visit shuffles afresh.
 
 ### Per-clip text color
 
