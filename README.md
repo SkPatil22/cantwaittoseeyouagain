@@ -25,68 +25,56 @@ Open <http://localhost:8000>.
 
 ## The clips
 
-The slideshow is built for **video clips** — `.mp4`, `.webm`, or `.mov`.
-The puzzle uses the first frame of clip #1 (extracted in the browser, so
-no ffmpeg needed). Drop your files into `assets/` named:
+The slideshow is **video-only** (`.mp4`, `.webm`, `.mov`). Images are
+ignored. The puzzle uses the first frame of the first clip the slideshow
+will play (extracted in the browser via canvas — no ffmpeg needed), so
+the puzzle ↔ slideshow handoff is a seamless still-to-motion fade.
 
 ```
-assets/landscape-01.mp4    # slideshow #1 — first frame becomes the puzzle
+assets/landscape-01.mp4
 assets/landscape-02.mp4
 ...
-assets/landscape-NN.mp4    # any count works (designed for ~30)
+assets/landscape-NN.mp4    # any count works
 ```
 
 The server lists whatever's in `assets/` at runtime via `/api/media` —
-no code edit needed when you add/remove/rename clips. If a slot has both
-a video and an image (e.g. `landscape-03.mp4` + `landscape-03.jpg`), the
-**video wins** so you can drop in real footage without first deleting
-placeholders.
+no code edit needed when you add/remove/rename clips.
 
-### Pull a 30-clip starter set
+### Pull from a Pexels likes page
+
+`tools/fetch_clips.py` scrapes any public Pexels likes page (default:
+the maintainer's), then API-fetches each video's best mp4.
 
 ```sh
-# One-time: get a free key at https://www.pexels.com/api/ (no card, ~30s)
-# Pass it any of these ways — pick whichever works in your shell:
+# 1. Get a free Pexels API key at https://www.pexels.com/api/ (no card)
+# 2. Pick whichever input style your shell likes:
 
-# Easiest — CLI flag, no shell config:
 python3 tools/fetch_clips.py --pexels-key abc123xyz
-
-# Or persist it in a .env file (gitignored):
+# or:
 echo 'PEXELS_API_KEY=abc123xyz' > .env
 python3 tools/fetch_clips.py
 
-# Or env var:
-#   bash/zsh:   export PEXELS_API_KEY=abc123xyz
-#   PowerShell: $env:PEXELS_API_KEY = "abc123xyz"
-#   cmd.exe:    set PEXELS_API_KEY=abc123xyz
-python3 tools/fetch_clips.py
+# Point at a different likes page:
+python3 tools/fetch_clips.py --likes-from https://www.pexels.com/@someone/likes/
+
+# Useful flags:
+#   --rename   wipe existing assets/landscape-*.mp4 first (clean numbering)
+#   --max 30   stop after 30 clips
+#   --force    re-download even if slot already filled
 ```
 
-Pulls a curated, themed 30-clip lineup into `assets/`:
+Slots are numbered sequentially in the order Pexels returns them on the
+page (`landscape-01.mp4`, `landscape-02.mp4`, …). The slideshow plays
+them in a **random order** stored in a cookie (`slideshow_order`) so the
+ordering is stable across reloads and never repeats a clip until the
+deck is exhausted, at which point a fresh shuffle starts.
 
-| slot | source | theme |
-|---|---|---|
-| 1–3   | NASA      | Earth from ISS, aurora, Earth-at-night (public domain) |
-| 4–6   | Pexels    | Arches/Milky Way / starry night |
-| 7–10  | Pexels    | Calm ocean / beaches / reef |
-| 11–14 | Pexels    | Mountains / alpine lakes |
-| 15–17 | Pexels    | Birds / eagle / flamingos |
-| 18–20 | Pexels    | Volcano eruption / lava |
-| 21–25 | Pexels    | Forest / waterfall / meadow |
-| 26–30 | Pexels    | Dunes / glacier / aurora / hills / storm |
+### Per-clip text color
 
-Idempotent (skips slots already filled). Use `--force` to re-download or
-`--only 4,12,18` to refresh specific slots.
-
-If you skip the Pexels key, only the 3 NASA slots populate; the script
-prints clear instructions for the rest. Free landscape footage also at
-<https://pixabay.com/videos>, <https://mixkit.co>, <https://coverr.co>,
-or your own phone — name them `landscape-NN.mp4`, drop them in, reload.
-
-> The first-run server bootstrap (`python3 server.py --setup-only`) pulls
-> 10 jpg **placeholders** so the page renders before you've added clips.
-> They sit in slots 1–10 and get overridden the moment you drop in the
-> matching `landscape-NN.mp4`.
+The "again?" / address / time text re-samples the dominant color from
+each clip's first frame and re-themes itself (light, vivid, same hue
+family as the video) so it always sits in the picture but stays
+readable. Font also cycles per clip.
 
 ## Controls
 

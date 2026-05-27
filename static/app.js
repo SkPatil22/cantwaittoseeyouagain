@@ -3,7 +3,7 @@
 // line-erase animation, and the slideshow + cycling text.
 
 import { JigsawPuzzle } from '/static/puzzle.js';
-import { Slideshow, fetchMedia, isVideoSrc, extractFirstFrame } from '/static/slideshow.js';
+import { Slideshow, fetchMedia, extractFirstFrame } from '/static/slideshow.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -26,27 +26,34 @@ let playArmed = false;
 
 async function resolvePuzzleImage(firstSrc) {
     if (!firstSrc) return null;
-    if (isVideoSrc(firstSrc)) {
-        try {
-            return await extractFirstFrame(firstSrc);
-        } catch (err) {
-            console.warn('first-frame extract failed, falling back', err);
-        }
+    try {
+        return await extractFirstFrame(firstSrc);
+    } catch (err) {
+        console.warn('first-frame extract failed', err);
+        return null;
     }
-    return firstSrc;
 }
 
 (async () => {
     const mediaList = await fetchMedia();
     if (!mediaList.length) {
-        console.error('no landscape-* files in assets/ — drop some clips in.');
+        console.error('no landscape-* videos in assets/ — drop some in.');
         return;
     }
+    // Construct slideshow first — it generates / restores the random order
+    // cookie, and the puzzle image should be the first frame of whichever
+    // clip the slideshow will play first so the puzzle→slideshow transition
+    // is seamless.
     slides = new Slideshow({
         mediaEl, againEl, addressEl: addrEl, timeEl: timeEl,
         mediaList, interval: 5500,
     });
-    const puzzleImg = await resolvePuzzleImage(mediaList[0]);
+    const firstSrc = mediaList[slides.order[0]];
+    const puzzleImg = await resolvePuzzleImage(firstSrc);
+    if (!puzzleImg) {
+        console.error('could not extract puzzle image from', firstSrc);
+        return;
+    }
     puzzle = new JigsawPuzzle({
         boardEl: board, piecesEl: pieces, resetBtn, puzzleImg,
     });

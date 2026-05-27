@@ -103,7 +103,7 @@ export class JigsawPuzzle extends EventTarget {
         this.board = boardEl;
         this.pieces = piecesEl;
         this.resetBtn = resetBtn;
-        this.puzzleImg = puzzleImg || '/assets/landscape-01.jpg';
+        this.puzzleImg = puzzleImg;
         this.state = null;
         this.placedCount = 0;
         this.pieceEls = [];

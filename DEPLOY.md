@@ -30,14 +30,13 @@ git clone https://github.com/SkPatil22/cantwaittoseeyouagain.git
 cd cantwaittoseeyouagain
 git checkout claude/happy-wright-0oKTJ      # or main once merged
 
-# Get your clips into place. The site is built for video — drop your
-# own .mp4 files at assets/landscape-NN.mp4, OR pull the curated 30-clip
-# starter set (NASA + Pexels):
-export PEXELS_API_KEY=<key from https://www.pexels.com/api/>   # free, 30 sec
-python3 tools/fetch_clips.py
-# If you don't have a Pexels key yet, jpg placeholders keep the page from
-# being blank:
-python3 server.py --setup-only
+# Get your clips into place. Video-only — pull them from a Pexels
+# likes page (default: the maintainer's), or just drop your own
+# landscape-NN.mp4 files into assets/ manually.
+python3 tools/fetch_clips.py --pexels-key <key from https://www.pexels.com/api/>
+# Point at a different likes page:
+#   python3 tools/fetch_clips.py --pexels-key <key> \
+#       --likes-from https://www.pexels.com/@you/likes/
 
 # Sanity check (Ctrl+C when satisfied)
 python3 server.py

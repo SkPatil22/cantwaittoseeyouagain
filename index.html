@@ -26,7 +26,15 @@
         <div id="play-overlay" aria-hidden="true">
             <button id="play-button" type="button" aria-label="play">
                 <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <path d="M 28 18 L 84 50 L 28 82 Z"/>
+                    <!-- Single rounded-corner triangle, fill only — no stroke
+                         (stroke + fill at the same color was rendering as a
+                         sharp inner triangle inside a rounded outline). -->
+                    <path d="M 22 27.85
+                             A 6 6 0 0 1 30.76 22.52
+                             L 73.67 44.67
+                             A 6 6 0 0 1 73.67 55.33
+                             L 30.76 77.48
+                             A 6 6 0 0 1 22 72.15 Z"/>
                 </svg>
             </button>
         </div>
