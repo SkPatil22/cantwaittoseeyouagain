@@ -45,10 +45,20 @@ placeholders.
 ### Pull a 30-clip starter set
 
 ```sh
-# One-time: free Pexels key (no card, no payment, ~30 sec to register)
-#   https://www.pexels.com/api/
-export PEXELS_API_KEY=<paste-the-key>
+# One-time: get a free key at https://www.pexels.com/api/ (no card, ~30s)
+# Pass it any of these ways — pick whichever works in your shell:
 
+# Easiest — CLI flag, no shell config:
+python3 tools/fetch_clips.py --pexels-key abc123xyz
+
+# Or persist it in a .env file (gitignored):
+echo 'PEXELS_API_KEY=abc123xyz' > .env
+python3 tools/fetch_clips.py
+
+# Or env var:
+#   bash/zsh:   export PEXELS_API_KEY=abc123xyz
+#   PowerShell: $env:PEXELS_API_KEY = "abc123xyz"
+#   cmd.exe:    set PEXELS_API_KEY=abc123xyz
 python3 tools/fetch_clips.py
 ```
 

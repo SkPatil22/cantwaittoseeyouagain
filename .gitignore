@@ -1,6 +1,10 @@
 # visit log — keep local only
 data/
 
+# local secrets (e.g. PEXELS_API_KEY for tools/fetch_clips.py)
+.env
+.env.local
+
 # downloaded sample assets — replace with your own and commit those if you want
 assets/*.jpg
 assets/*.jpeg

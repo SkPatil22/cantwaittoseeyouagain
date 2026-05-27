@@ -6,26 +6,28 @@ Sources (all free, all license-clear):
   - NASA Image & Video Library (no key required) — public domain
   - Pexels Videos (free API key required)
 
-The Pexels key is the only setup step:
-  1. Go to https://www.pexels.com/api/ and click "Get Started"
-     (email/Google/etc — no payment, no card)
-  2. They show you a key on the dashboard. Copy it.
-  3. Export it before running:
-         export PEXELS_API_KEY=<paste-the-key>
-     Or put it in a .env-style file and source it.
+Get a Pexels key once at https://www.pexels.com/api/ (email/Google,
+no payment). Then provide it any of these ways:
 
-Then:
-    python3 tools/fetch_clips.py            # fill any empty slots
-    python3 tools/fetch_clips.py --force    # re-download even if present
-    python3 tools/fetch_clips.py --only 5,12,18
+    # 1. CLI flag (simplest, no shell config):
+    python3 tools/fetch_clips.py --pexels-key abc123xyz
 
-Behaviour:
-  - Idempotent: skips slots already filled with any supported media file.
-  - NASA queries always run (no key needed). If a NASA query returns
-    nothing, the script reports it and moves on.
-  - Pexels queries are skipped with a clear message if no key is set.
-  - Files land at assets/landscape-NN.mp4.
+    # 2. .env file next to the repo root (auto-loaded, gitignored):
+    echo 'PEXELS_API_KEY=abc123xyz' > .env
+    python3 tools/fetch_clips.py
 
+    # 3. Environment variable (per shell):
+    #   bash/zsh/sh:   export PEXELS_API_KEY=abc123xyz
+    #   fish:          set -x PEXELS_API_KEY abc123xyz
+    #   PowerShell:    $env:PEXELS_API_KEY = "abc123xyz"
+    #   cmd.exe:       set PEXELS_API_KEY=abc123xyz
+    python3 tools/fetch_clips.py
+
+Other flags:
+    --force            re-download even slots that are already filled
+    --only 5,12,18     fetch only specific slot numbers
+
+Idempotent. Files land at assets/landscape-NN.mp4.
 Disk: budget ~200–400 MB for the full set at 1080p.
 """
 
@@ -214,19 +216,49 @@ def existing_for_slot(slot: int) -> Path | None:
     return None
 
 
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Tiny .env reader: KEY=VALUE per line, # comments, no quotes parsing."""
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip().strip('"').strip("'")
+        if k:
+            out[k] = v
+    return out
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description="Pull a 30-clip set of free-licensed landscape footage.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    ap.add_argument("--pexels-key", default="",
+                    help="Pexels API key (overrides env / .env)")
     ap.add_argument("--force", action="store_true",
                     help="re-download even if a slot is already filled")
     ap.add_argument("--only", default="",
                     help="comma-separated slot numbers to fetch (e.g. 4,7,18)")
     args = ap.parse_args()
 
-    pexels_key = os.environ.get("PEXELS_API_KEY", "").strip()
+    # Resolve Pexels key: CLI flag > .env file > environment variable.
+    dotenv = _read_env_file(ROOT / ".env")
+    pexels_key = (
+        args.pexels_key.strip()
+        or dotenv.get("PEXELS_API_KEY", "").strip()
+        or os.environ.get("PEXELS_API_KEY", "").strip()
+    )
     if not pexels_key:
-        print("note: PEXELS_API_KEY not set — Pexels slots will be skipped.")
-        print("      sign up at https://www.pexels.com/api/ (free, 30 sec)")
-        print("      then `export PEXELS_API_KEY=<key>` and rerun.\n")
+        print("note: no Pexels key found — Pexels slots will be skipped.")
+        print("      sign up free at https://www.pexels.com/api/, then either:")
+        print("        python3 tools/fetch_clips.py --pexels-key <key>")
+        print("        echo 'PEXELS_API_KEY=<key>' > .env  &&  rerun\n")
 
     only_set: set[int] = set()
     if args.only:
