@@ -269,6 +269,11 @@ html, body {
     margin-top: 22px;
 }
 
+#date {
+    margin-top: 2px;
+    letter-spacing: 0.28em;
+}
+
 #time {
     margin-top: 2px;
     letter-spacing: 0.32em;

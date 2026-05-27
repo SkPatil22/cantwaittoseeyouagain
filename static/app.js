@@ -17,6 +17,7 @@ const slidesLay  = $('#slideshow');
 const mediaEl    = $('#media-stage');
 const againEl    = $('#again');
 const addrEl     = $('#address');
+const dateEl     = $('#date');
 const timeEl     = $('#time');
 const ssToggle   = $('#slideshow-toggle');
 
@@ -37,7 +38,7 @@ async function resolvePuzzleImage(firstSrc) {
 (async () => {
     const mediaList = await fetchMedia();
     if (!mediaList.length) {
-        console.error('no landscape-* videos in assets/ — drop some in.');
+        console.error('no videos in assets/ — drop some .mp4/.webm/.mov files in.');
         return;
     }
     // Construct slideshow first — it generates / restores the random order
@@ -45,7 +46,8 @@ async function resolvePuzzleImage(firstSrc) {
     // clip the slideshow will play first so the puzzle→slideshow transition
     // is seamless.
     slides = new Slideshow({
-        mediaEl, againEl, addressEl: addrEl, timeEl: timeEl,
+        mediaEl, againEl,
+        addressEl: addrEl, dateEl: dateEl, timeEl: timeEl,
         mediaList, interval: 5500,
     });
     const firstSrc = mediaList[slides.order[0]];
@@ -81,8 +83,9 @@ function onReset() {
     resetBtn.classList.remove('hidden');
     againEl.classList.remove('visible');
     addrEl.classList.remove('visible');
+    dateEl.classList.remove('visible');
     timeEl.classList.remove('visible');
-    slides.stop();
+    if (slides) slides.stop();
 }
 
 playBtn.addEventListener('click', async () => {

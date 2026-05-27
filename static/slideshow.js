@@ -5,8 +5,8 @@
 //  - per-clip text color sampled from the video's current frame, then
 //    pushed toward a light, vivid value that reads against any background
 //
-// No image fallback. Drop landscape-NN.mp4 (.webm/.mov) into assets/ and
-// the server lists them via /api/media.
+// No image fallback. Drop any .mp4/.webm/.mov file into assets/ — filenames
+// don't matter; the server lists them via /api/media.
 
 // ---------- helpers ------------------------------------------------------
 
@@ -179,11 +179,13 @@ const FONTS = [
 ];
 
 export class Slideshow {
-    constructor({ mediaEl, againEl, addressEl, timeEl, mediaList, interval = 5500 }) {
+    constructor({ mediaEl, againEl, addressEl, dateEl, timeEl, mediaList, interval = 5500 }) {
         this.media = mediaEl;
         this.again = againEl;
         this.address = addressEl;
+        this.date = dateEl;
         this.time = timeEl;
+        this.textEls = [againEl, addressEl, dateEl, timeEl].filter(Boolean);
         this.mediaList = mediaList || [];
         this.interval = interval;
         this.elements = [];
@@ -257,9 +259,7 @@ export class Slideshow {
     }
 
     revealText() {
-        this.again.classList.add('visible');
-        this.address.classList.add('visible');
-        this.time.classList.add('visible');
+        for (const el of this.textEls) el.classList.add('visible');
     }
 
     _advance() {
@@ -282,18 +282,26 @@ export class Slideshow {
         next.classList.add('active');
         try { next.currentTime = 0; next.play(); } catch {}
 
-        // Color sample once the frame is on screen.
+        // Color sample once the GPU actually has the frame painted.
+        // readyState 2 (HAVE_CURRENT_DATA) is theoretically enough but in
+        // practice drawImage() returns a black frame until `canplay` /
+        // `playing` fires. Listen for both; if neither shows up within
+        // 1500ms fall back to sampling anyway so the text isn't stuck on
+        // the prior video's color.
+        let sampled = false;
         const sample = () => {
+            if (sampled) return;
+            sampled = true;
             const color = pickTextColor(next);
             this._restyleText(color);
         };
-        // `loadeddata` may already have fired during preload; either way wait
-        // a beat so the GPU has the frame.
-        if (next.readyState >= 2) {
-            requestAnimationFrame(sample);
+        const queue = () => requestAnimationFrame(sample);
+        if (next.readyState >= 3) {
+            queue();
         } else {
-            next.addEventListener('loadeddata', () => requestAnimationFrame(sample),
-                { once: true });
+            next.addEventListener('canplay', queue, { once: true });
+            next.addEventListener('playing', queue, { once: true });
+            setTimeout(queue, 1500);
         }
     }
 
@@ -303,7 +311,7 @@ export class Slideshow {
             font = FONTS[Math.floor(Math.random() * FONTS.length)];
         } while (FONTS.length > 1 && font === this.lastFont);
         this.lastFont = font;
-        for (const el of [this.again, this.address, this.time]) {
+        for (const el of this.textEls) {
             el.style.fontFamily = font;
             el.style.color = color;
         }

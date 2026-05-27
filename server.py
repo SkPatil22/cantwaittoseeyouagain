@@ -3,8 +3,9 @@
 cantwaittoseeyouagain — local server.
 
 Serves the static site and logs visits to data/visits.log as JSONL.
-The slideshow is video-only — drop landscape-NN.mp4/.webm/.mov files
-into assets/ (use tools/fetch_clips.py to pull from your Pexels likes).
+The slideshow is video-only — drop any .mp4/.webm/.mov file into
+assets/ (filenames don't matter; use tools/fetch_clips.py if you want
+to pull from a Pexels likes page).
 
 Usage:
     python3 server.py                  # listen on http://0.0.0.0:8000
