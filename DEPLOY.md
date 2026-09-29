@@ -1,214 +1,120 @@
-# Deploying cantwaittoseeyouagain (free path)
+# Publishing it (free, no server, about ten minutes)
 
-Goal: a stable HTTPS URL guests can hit, no domain purchase, no router
-port forwarding, no public-facing home IP. The site runs on your Pi (or
-any always-on Linux box) and **Tailscale Funnel** exposes it to the
-public internet through Tailscale's edge.
+The site is just files, so it doesn't need a computer of yours running. Put the `site` folder on
+**Cloudflare Pages** and you get a permanent link like
 
-End-state URL looks like:
+    https://cantwaittoseeyouagain.pages.dev
 
-```
-https://<device>.<tailnet>.ts.net
-```
+with HTTPS, worldwide delivery, unlimited bandwidth, and visit stats, for $0 and no credit card.
+Your Pi, your desktop, Tailscale, tunnels and port-forwarding are all out of the picture.
 
-e.g. `https://cantwait.raleigh.ts.net`. Not as pretty as a `.com` but
-free, stable, and shareable.
+## Steps
 
-The path is two pieces:
-
-1. **Run the site as a systemd service** on the Pi.
-2. **Run Tailscale Funnel** on the same Pi, pointed at `localhost:8000`.
-
----
-
-## 1. Get the site running on the Pi
-
-```sh
-sudo apt update && sudo apt install -y python3 git
-
-git clone https://github.com/SkPatil22/cantwaittoseeyouagain.git
-cd cantwaittoseeyouagain
-git checkout claude/happy-wright-0oKTJ      # or main once merged
-
-# Get your clips into place. Video-only — pull them from a Pexels
-# likes page (default: the maintainer's), or just drop your own
-# landscape-NN.mp4 files into assets/ manually.
-python3 tools/fetch_clips.py --pexels-key <key from https://www.pexels.com/api/>
-# Point at a different likes page:
-#   python3 tools/fetch_clips.py --pexels-key <key> \
-#       --likes-from https://www.pexels.com/@you/likes/
-
-# Sanity check (Ctrl+C when satisfied)
-python3 server.py
-# -> Serving on http://0.0.0.0:8000
-```
-
-Hit `http://<pi-ip>:8000` from another device on your LAN to confirm.
-
-### Install the systemd unit
-
-```sh
-# Edit User= / paths in deploy/cantwait.service if your username isn't `pi`
-# or your clone path differs from /home/pi/cantwaittoseeyouagain.
-sudo cp deploy/cantwait.service /etc/systemd/system/cantwait.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now cantwait
-systemctl status cantwait                    # should be "active (running)"
-journalctl -u cantwait -f                    # live logs
-```
-
-The unit binds to `127.0.0.1:8000` because Tailscale Funnel connects from
-localhost. If you want LAN access too, change `--host 127.0.0.1` to
-`--host 0.0.0.0` in the unit and `systemctl restart cantwait`.
-
-## 2. Set up Tailscale Funnel
-
-### Install Tailscale
-
-```sh
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
-The `tailscale up` step prints a URL — open it on any device, sign in
-(GitHub / Google / Microsoft / email all free), and approve the Pi. The
-Pi joins your tailnet.
-
-### Pick nice names (one-time, optional but recommended)
-
-The Funnel URL is `<device-name>.<tailnet-name>.ts.net`. Defaults are
-auto-generated and ugly. Fix them once:
-
-1. **Tailnet name** — <https://login.tailscale.com/admin/dns> →
-   "Tailnet name" → Rename. Pick something short, e.g. `raleigh` or your
-   first name. Globally unique on Tailscale.
-2. **Device name** — <https://login.tailscale.com/admin/machines> → click
-   the Pi → Edit machine name → set to `cantwait` (or whatever you want
-   the URL prefix to be).
-
-After both renames the URL becomes `https://cantwait.raleigh.ts.net` (or
-whatever you chose).
-
-### Turn on HTTPS for your tailnet
-
-Once, in the admin panel:
-
-<https://login.tailscale.com/admin/dns> → "HTTPS Certificates" → enable.
-This lets Tailscale issue Let's Encrypt certs for your `.ts.net`
-hostnames.
-
-### Enable Funnel
-
-On the Pi:
-
-```sh
-# Allow this device to use Funnel (one-time per device).
-sudo tailscale set --advertise-tags=tag:funnel
-```
-
-Then in the admin panel → **Access Controls** (the policy editor),
-ensure your policy lets that tag use funnel. Easiest baseline policy
-addition:
-
-```hujson
-{
-  "tagOwners": {
-    "tag:funnel": ["autogroup:admin"],
-  },
-  "nodeAttrs": [
-    { "target": ["tag:funnel"], "attr": ["funnel"] },
-  ],
-}
-```
-
-Save. Back on the Pi:
-
-```sh
-sudo tailscale funnel --bg 8000
-```
-
-`--bg` runs it in the background as a persistent serve config — survives
-reboots. Tailscale prints the public URL it's listening on.
-
-Confirm it's active:
-
-```sh
-tailscale funnel status
-```
-
-You should see something like:
+**1. Prepare the clips** (once, and again whenever the videos change)
 
 ```
-https://cantwait.raleigh.ts.net (Funnel on)
-|-- / proxy http://127.0.0.1:8000
+python tools/build.py
 ```
 
-## 3. Verify
+That's what makes the site light enough to host free: each clip becomes a few MB instead of 20-40 MB
+(Cloudflare Pages refuses any single file over 25 MiB).
 
-From your phone on cellular (anywhere off your LAN):
+**2. Look at it locally** (optional but worth 60 seconds)
 
-```sh
-curl -I https://cantwait.raleigh.ts.net
-# -> HTTP/2 200, valid Let's Encrypt cert
+```
+python server.py
 ```
 
-Open it in a browser. On the Pi, `tail -f data/visits.log` should show
-the visit — Tailscale forwards the visitor IP in `X-Forwarded-For`, which
-the server picks up.
+Open the address it prints. It also prints one for your phone (same Wi-Fi). Type `again` to skip the puzzle.
 
-That's the whole loop.
+**3. Upload**
 
----
+1. Make a free account at <https://dash.cloudflare.com/sign-up> (email + password, no card).
+2. **Workers & Pages** -> **Create application** -> **Pages** -> **Drag and drop your files**
+   (Cloudflare shuffles the buttons around now and then; that's the one you want).
+3. Project name: `cantwaittoseeyouagain` (this becomes the link).
+4. Drag the **`site`** folder onto the page (the folder itself, or zip it first) -> **Deploy site**.
 
-## After it's live
+**4. Check it**
 
-- **Replace assets.** Drop new files in `assets/`, then `git pull` on the
-  Pi (no restart needed — files are served per-request).
-- **Push code changes.** `git pull` on the Pi; `sudo systemctl restart
-  cantwait` to apply.
-- **See visits.** `tail -n 50 data/visits.log` or
-  `cat data/visits.log | jq -c '{ts, ip, ref}' | tail`.
-- **Pause traffic.** `sudo tailscale funnel --bg off` takes the site off
-  the public internet without touching the local server.
-- **Take site down for everyone but you.** `sudo tailscale funnel off`
-  but keep `tailscale up` — the site is still reachable from your other
-  Tailscale-connected devices via `cantwait.raleigh.ts.net`.
+```
+python tools/check_site.py https://cantwaittoseeyouagain.pages.dev
+```
 
----
+It confirms every file loads, every clip and picture is reachable, video is served with Range support
+(iPhones refuse to play video without it) and nothing is over the size limit. Fix anything it flags before
+you send the link.
 
-## Caveats with the free path
+**5. Turn on the visit log**
 
-- **URL is `.ts.net`, not `.com`.** If you want a real domain later, see
-  the "Upgrading to a real domain" note below.
-- **Tailscale's free tier** allows Funnel and up to 100 devices. Plenty
-  for a personal invite site.
-- **Bandwidth/traffic** — Tailscale Funnel is fine for a save-the-date
-  with dozens of guests. If it goes viral and you start serving
-  thousands of MB, you'll hit limits.
-- **Cold starts.** First request after a long quiet period sometimes
-  takes an extra second while the tunnel wakes — harmless.
+In the Cloudflare dashboard open your project -> **Metrics** -> **Web Analytics** -> **Enable**. Cloudflare adds
+its counter on your next deployment; after that the same place shows visits, countries, devices and where
+people came from. No cookies, nothing for guests to accept.
 
-## Upgrading to a real domain later
+*If the switch isn't there or doesn't stick:* dashboard -> **Web Analytics** -> **Add a site**, copy the token, and
+paste it into `site/js/config.js` as `analyticsToken`, then re-upload.
 
-If you change your mind and want `cantwaittoseeyouagain.com` (about $10/yr
-at Cloudflare Registrar), the swap is:
+**6. Fix the link preview** (one line, optional)
 
-1. Buy the domain at <https://dash.cloudflare.com> → Domain Registration.
-2. On the Pi: `curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/c.deb && sudo dpkg -i /tmp/c.deb`
-3. `cloudflared tunnel login`, `cloudflared tunnel create cantwait`.
-4. Create `/etc/cloudflared/config.yml`:
-   ```yaml
-   tunnel: <UUID-from-create>
-   credentials-file: /etc/cloudflared/<UUID>.json
-   ingress:
-     - hostname: cantwaittoseeyouagain.com
-       service: http://localhost:8000
-     - hostname: www.cantwaittoseeyouagain.com
-       service: http://localhost:8000
-     - service: http_status:404
-   ```
-5. `cloudflared tunnel route dns cantwait cantwaittoseeyouagain.com` (and `www.`).
-6. `sudo cloudflared service install && sudo systemctl enable --now cloudflared`.
-7. `sudo tailscale funnel off` (so only Cloudflare serves it).
+When you text the link, chat apps show a preview image. In `site/index.html` the `og:image` line assumes your
+address is `cantwaittoseeyouagain.pages.dev`. If Cloudflare gave you a different one (project names are shared
+by everyone, so a taken name gets a suffix), change that line to match and re-upload.
 
-The systemd unit for the Python server doesn't change.
+## Updating later
+
+Change the text or rebuild the clips, then open your project -> **Create deployment** and drag the `site`
+folder in again. Files that didn't change aren't re-uploaded. Visitors get the new version on their next load
+(clips and pictures are cached for up to a day; `media.json` is always re-checked).
+
+## If something goes wrong
+
+| Problem | Fix |
+|---|---|
+| Page loads but 404s on everything | Known dashboard hiccup with drag-and-drop. Use the command line instead: `npx wrangler login`, then `npx wrangler pages deploy site --project-name cantwaittoseeyouagain` (needs Node.js). |
+| `check_site.py` says a clip is over 25 MiB | `python tools/build.py --maxrate 4 --force` |
+| Videos don't play on iPhone | `check_site.py` will say "no Range support". Every real host has it; this only happens when self-hosting with the wrong server. |
+| Name already taken | Pick another; then update the `og:image` line (step 6). |
+| Want your own domain | Project -> **Custom domains**. Needs a domain you buy (about $10/year for .com). Optional. |
+
+## Why this and not the Pi + Tailscale plan?
+
+| | **Cloudflare Pages** | Netlify | GitHub Pages | Pi + Tailscale Funnel |
+|---|---|---|---|---|
+| Cost | free | free | free | free |
+| Your computer must stay on | no | no | no | **yes** |
+| Traffic allowance | unlimited (static files) | about 15 GB/month, then the site is paused | 100 GB/month (soft) | your home upload speed |
+| Single-file limit | 25 MiB | none we could confirm | 100 MB | none |
+| Keeps your address private | yes (upload, no repo) | yes | **no**: needs a public repo on the free plan | yes |
+| Link | `name.pages.dev` | `name.netlify.app` | `you.github.io/repo` | `name.tailnet.ts.net` |
+| Visit stats | one click, free | paid add-on | none | your own log |
+| Things to set up | account + one upload | account + one upload | repo settings + a build workflow | 15+ steps (install, auth, ACL policy, HTTPS certs, funnel, systemd) |
+
+Video is what decides it: a guest downloads tens of MB, so the traffic allowance matters more than for a normal
+page. Cloudflare doesn't meter it; Netlify's newer free plan does (about 15 GB, then everything on your account
+pauses until next month).
+
+**Cloudflare Drop** (launched July 2026: drag a folder at cloudflare.com/drop and get a link with no account)
+is tempting, but its published limits are 25 MiB per file and "HTML, CSS, JavaScript, images and fonts", and the
+link expires after 60 minutes unless you sign in to claim it. I haven't tested whether it accepts video, so
+treat it as a way to preview the page layout at most.
+
+*How this was checked:* the limits and the upload flow above come from Cloudflare's, GitHub's and Netlify's
+current documentation and write-ups (linked below). They were not run against a live account (the environment
+this was built in has no route to Cloudflare), which is exactly why `tools/check_site.py` exists: run it after
+your first upload and it tells you whether the real thing behaves.
+
+Sources:
+[Cloudflare Pages limits](https://developers.cloudflare.com/pages/platform/limits/) |
+[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/) |
+[Web Analytics for Pages](https://developers.cloudflare.com/pages/how-to/web-analytics/) |
+[Cloudflare Drop](https://developers.cloudflare.com/changelog/post/2026-07-08-cloudflare-drag-and-drop/) |
+[Netlify free plan (2026)](https://netli.fyi/blog/netlify-free-plan-limits-2026) |
+[GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
+
+## Hosting it yourself (optional)
+
+Only if you'd rather run it on your own always-on machine. `python server.py --cache` serves the `site`
+folder (and only that folder) with video seeking, and writes `data/visits.log`. `deploy/cantwait.service` is a
+systemd unit for a Raspberry Pi. To reach it from outside your home you also need a tunnel or a forwarded
+port, which is the part this guide was written to avoid. The earlier Tailscale Funnel walkthrough is in git
+history (commit `a078775`).

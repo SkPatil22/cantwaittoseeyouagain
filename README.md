@@ -1,128 +1,88 @@
 # cantwaittoseeyouagain
 
-A one-page interactive invitation. Solve a jigsaw of a landscape photo, hit
-play, and watch the landscapes cycle behind a softly fading "again?" with the
-when/where below.
+A one-page invitation. A landscape photograph arrives as a jigsaw puzzle. Solve it, press
+play, and the lines wipe away as the picture comes alive: hard-cut clips of landscapes, with
+**again?**, the address, the date and the time fading in over each one in a new font and a
+color taken from the footage.
 
-## Run it
-
-```sh
-python3 server.py
-```
-
-That's it — stdlib only, no dependencies. On first run the server downloads
-ten sample landscape photos into `assets/` so the site has something to
-render. Replace any of those files with your own and reload.
-
-Open <http://localhost:8000>.
-
-### Flags
-
-- `--port 80` — different port (use `sudo` for ports below 1024)
-- `--host 127.0.0.1` — bind to localhost only
-- `--no-download` — skip asset bootstrap
-- `--setup-only` — download assets and exit
-
-## The clips
-
-The slideshow is **video-only** (`.mp4`, `.webm`, `.mov`). Images are
-ignored. The puzzle uses the first frame of the first clip the slideshow
-will play (extracted in the browser via canvas — no ffmpeg needed), so
-the puzzle ↔ slideshow handoff is a seamless still-to-motion fade.
+## Make it (about five minutes)
 
 ```
-assets/anything-you-want.mp4
-assets/IMG_1234.mov
-assets/pexels-12345.mp4
-...
+1.  Put your videos in  assets/          (any filenames, .mp4 / .mov / .webm)
+2.  python tools/build.py                (trims + compresses them into site/clips/)
+3.  python server.py                     (preview; it prints an address for your phone too)
+4.  Publish the  site  folder            (free, no server: see DEPLOY.md)
 ```
 
-**Filenames don't matter.** Drop any video into `assets/` and it gets
-played. The server lists whatever's there at runtime via `/api/media`,
-sorted alphabetically. Hidden files (`.DS_Store` etc.) and non-video
-extensions are skipped.
+`python` is `py` on Windows if `python` isn't found, and `python3` on Mac/Linux. There is nothing to
+install: the build step offers to fetch a private copy of ffmpeg for you the first time.
 
-### Pull from a Pexels likes page
+Want clips from a Pexels likes page? `python tools/fetch_clips.py --pexels-key <key>` downloads
+them into `assets/`, then continue at step 2.
 
-`tools/fetch_clips.py` scrapes any public Pexels likes page (default:
-the maintainer's), then API-fetches each video's best mp4 and saves it
-as `assets/pexels-<id>.mp4`.
+## What guests see
 
-```sh
-# 1. Get a free Pexels API key at https://www.pexels.com/api/ (no card)
-# 2. Pick whichever input style your shell likes:
+1. **A puzzle.** Around 36 to 66 pieces depending on the screen (phones get bigger pieces),
+   scattered over the whole screen. Drag them into place. Progress is saved, so a reload
+   picks up where they left off.
+2. **A big glass play button** appears when it's finished.
+3. **Press it** and every puzzle line is wiped away, each one from one end to the other, at
+   its own moment, fading as it goes. The finished picture is the first frame of the first clip,
+   so it simply starts to move.
+4. **The reveal.** Hard cuts between clips, in a random order that never repeats until every
+   clip has played. The text changes font and color on the same frame as each cut. A small
+   pause button appears when they move the mouse or tap.
 
-python3 tools/fetch_clips.py --pexels-key abc123xyz
-# or:
-echo 'PEXELS_API_KEY=abc123xyz' > .env
-python3 tools/fetch_clips.py
+Testing shortcuts: type **again** anywhere (or open the page with `#again` on the end) to
+auto-solve the puzzle. The small circular-arrow button in the corner starts over.
 
-# Point at a different likes page:
-python3 tools/fetch_clips.py --likes-from https://www.pexels.com/@someone/likes/
+## Change the details
 
-# Useful flags:
-#   --reset    delete every existing pexels-*.mp4 first (leaves your own files alone)
-#   --max 30   stop after 30 clips
-#   --force    re-download even if the file already exists
+Open `site/index.html` and edit the three lines under `<h1>again?</h1>`:
+
+```html
+<p class="line address" id="address">2512 Farlow Gap Ln, Raleigh NC, 27603</p>
+<p class="line date" id="date">oct 17th</p>
+<p class="line time" id="time">6pm</p>
 ```
 
-The fetcher names files by Pexels video ID (`pexels-12345.mp4`), so
-re-running it just adds new likes and skips ones already on disk. Your
-own files dropped into `assets/` with any name are untouched.
+Everything else worth tuning is in `site/js/config.js` (how long each clip shows, the
+auto-solve word, an optional analytics token).
 
-### Play order
+**Text color for a clip looks wrong?** `python tools/build.py` picks colors from the footage and
+stores them in `site/clips/media.json` (`ink` for the big word, `ink2` for the small lines).
+Edit the hex value there. Rebuilding keeps your edit as long as that video didn't change.
 
-The slideshow plays clips in a **random order** stored in a cookie
-(`slideshow_order`). Each clip plays exactly once before any repeats; at
-the end of a cycle a fresh shuffle is generated. The order survives
-reloads — refreshing in the middle of the slideshow picks up where it
-left off. Add or remove clips from `assets/` and the cookie self-
-invalidates (length mismatch), so the next visit shuffles afresh.
-
-### Per-clip text color
-
-The "again?" / address / time text re-samples the dominant color from
-each clip's first frame and re-themes itself (light, vivid, same hue
-family as the video) so it always sits in the picture but stays
-readable. Font also cycles per clip.
-
-## Controls
-
-- **`reset`** chip (bottom-right while solving) — clear progress and
-  re-scatter.
-- **type `again`** — autocomplete the puzzle (handy for testing the play
-  → slideshow transition).
-- **pause/play chip** (bottom-right during the slideshow) — freeze on the
-  current clip; click again to resume.
-
-## Visit log
-
-Every hit on `/` is recorded as a JSON line in `data/visits.log`:
+## The folders
 
 ```
-{"ts": "...", "ip": "...", "ua": "...", "ref": "...", "path": "/"}
+assets/        your original videos (never modified, never committed)
+site/          the whole website: this is the folder you publish
+  index.html   the page (and the event details)
+  css/  js/    styling and code (no build tools, no dependencies)
+  fonts/       ten self-hosted fonts (SIL Open Font License, licences included)
+  clips/       made by tools/build.py: compressed clips, first-frame pictures, media.json
+tools/         build.py (prepare clips), check_site.py (test a published site), fetch_clips.py
+server.py      local preview server (serves only site/, supports video seeking)
+DEPLOY.md      how to publish for free
 ```
 
-Tail it:
+## Visits
 
-```sh
-tail -f data/visits.log
-```
+A free static host has no server of your own, so use its analytics: on Cloudflare Pages it's a
+one-click switch (see DEPLOY.md). When you run `server.py` yourself it also appends one line per
+page view to `data/visits.log` (time, IP, country if known, browser).
 
-## Hosting on a Raspberry Pi
+## Good to know
 
-For the free, no-domain-needed public setup using **Tailscale Funnel**
-(URL like `https://cantwait.<yourname>.ts.net`), see **[DEPLOY.md](DEPLOY.md)**.
-
-Quick local-network test:
-
-1. `git clone` this repo onto the Pi.
-2. `python3 server.py --port 8000 &` (or use systemd / `screen` / `tmux`).
-3. Bookmark `http://<pi-ip>:8000` from another device on your LAN.
-
-## Progress is sticky
-
-Puzzle progress is saved to a `puzzle_state` cookie (60 days). Reloads pick
-up where you left off — the layout is regenerated from a seed stored in the
-same cookie so piece edges stay consistent. Hit the small "reset" button to
-clear and re-scatter.
+- **Cookies** hold the puzzle progress and the playlist order (about 300 bytes together).
+  They're functional only; nothing is tracked.
+- **Black screen or nothing plays on an iPhone?** The host must support HTTP Range requests.
+  Every real host does; Python's built-in `http.server` does not (that's why this project has its
+  own `server.py`). `python tools/check_site.py <your address>` tells you for certain.
+- **A clip that can't be loaded is skipped** automatically. Vertical (portrait) clips are
+  left out by the build because they'd be cropped to a thin strip on a landscape screen.
+- Fonts: Playfair Display, Cormorant Garamond, EB Garamond, Fraunces, DM Serif Display, Lora,
+  Bodoni Moda, Inter, Manrope, Josefin Sans (all SIL OFL, Latin subset, one weight each).
+- The jigsaw piece shapes follow the public-domain curve construction from Draradech's
+  jigsaw generator.
