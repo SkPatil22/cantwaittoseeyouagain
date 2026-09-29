@@ -12,9 +12,9 @@ You need a free Pexels API key:
   1. https://www.pexels.com/api/  →  Get Started
   2. Provide it any of these ways (no need to fiddle with shell exports):
 
-       python3 tools/fetch_clips.py --pexels-key abc123xyz
-       echo 'PEXELS_API_KEY=abc123xyz' > .env  &&  python3 tools/fetch_clips.py
-       PEXELS_API_KEY=abc123xyz python3 tools/fetch_clips.py     # one-off
+       python tools/fetch_clips.py --pexels-key abc123xyz
+       echo 'PEXELS_API_KEY=abc123xyz' > .env  &&  python tools/fetch_clips.py
+       PEXELS_API_KEY=abc123xyz python tools/fetch_clips.py     # one-off
        # or `export PEXELS_API_KEY=abc123xyz` if your shell supports it
 
 Flags:
@@ -28,6 +28,9 @@ Flags:
                          (does not touch files you put there yourself)
 
 Disk: budget ~10–15 MB per clip at 1080p.
+
+These are the RAW downloads. Next step:  python tools/build.py
+(it trims and compresses them into site/clips/ - the folder you publish).
 """
 
 from __future__ import annotations
@@ -216,7 +219,7 @@ def main() -> int:
     if not key:
         print("error: no Pexels API key found.")
         print("       sign up free at https://www.pexels.com/api/, then:")
-        print("         python3 tools/fetch_clips.py --pexels-key <key>")
+        print("         python tools/fetch_clips.py --pexels-key <key>")
         print("       or `echo PEXELS_API_KEY=<key> > .env`")
         return 2
 
@@ -273,6 +276,8 @@ def main() -> int:
         print("misses:")
         for vid, why in failed:
             print(f"  pexels-{vid}  {why}")
+    if ok or skipped:
+        print("\nNext:  python tools/build.py")
     return 0 if not failed else 1
 
 

@@ -1,0 +1,453 @@
+/* ------------------------------------------------------------------ tokens */
+
+:root {
+    --bg: #0e0c12;
+    --bg-2: #1b1622;
+    --ink: #f4e9d0;                 /* title color - replaced on every cut */
+    --font: "Playfair Display";     /* title font  - replaced on every cut */
+    --wght: 500;
+    --fsize: 1;
+    --dsize: 1;
+    --dstroke: 0px;
+    --track: -0.02em;
+    --sh-a: 6 4 10;                 /* halo behind the big word (rgb triplet) - replaced on every cut */
+    --sh-b: 6 4 10;                 /* halo behind the small lines */
+    --rim1: .55;                    /* strength of the 1px rim around the small lines */
+    --rim2: .45;
+
+    --ease: cubic-bezier(.2, .8, .2, 1);        /* arrivals: quick start, long settle */
+    --soft: cubic-bezier(.4, 0, .2, 1);         /* fades */
+
+    --sat: env(safe-area-inset-top, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+
+    color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+body {
+    color: #fff;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;                 /* the page never scrolls or zooms; pieces own the gestures */
+    overscroll-behavior: none;
+}
+
+:focus-visible { outline: 2px solid rgba(255, 255, 255, .9); outline-offset: 4px; }
+
+#stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 38%, var(--bg-2) 0%, var(--bg) 68%);
+}
+
+/* --------------------------------------------------------------- puzzle */
+
+#puzzle { position: absolute; inset: 0; }
+
+/* The finished picture sits UNDER the pieces and is revealed once they're all
+   home - so anti-aliasing between pieces can never show a seam. */
+#assembled {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+}
+#puzzle.solved #assembled { opacity: 1; }
+
+#pieces { position: absolute; inset: 0; }
+
+.piece {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;               /* only the piece's real outline (.hit) grabs */
+}
+.piece svg { display: block; overflow: visible; touch-action: none; }
+
+.piece .sh {                            /* soft shadow, baked into the layer: cheap while dragging */
+    fill: #000;
+    opacity: .5;
+    transform: translate(0, 7px);
+    transition: opacity .25s var(--soft), transform .25s var(--ease);
+}
+.piece.lifted .sh { opacity: .62; transform: translate(0, 18px); }
+
+.piece .sheen { fill: url(#pz-sheen); pointer-events: none; }
+.piece .edge  { fill: none; stroke: rgba(255, 255, 255, .42); stroke-width: 1; pointer-events: none; }
+.piece .hit   { fill: transparent; pointer-events: all; cursor: grab; }
+.piece.lifted .hit { cursor: grabbing; }
+
+.piece.placed .sh,
+.piece.placed .sheen { opacity: 0; }
+.piece.placed .hit { pointer-events: none; cursor: default; }
+
+/* Solved: outlines hand over to the seam overlay, which is what the play button wipes away. */
+#puzzle.solved .piece .edge { opacity: 0; transition: opacity .35s var(--soft); }
+
+#seams {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+#seams path {
+    fill: none;
+    stroke: rgba(255, 255, 255, .5);
+    stroke-width: 1;
+    stroke-dasharray: 1 2;              /* pathLength=1: one dash = the whole line (wiped by dashoffset) */
+    opacity: 0;
+    transition: opacity .35s var(--soft);
+}
+#puzzle.solved #seams path { opacity: 1; }
+
+/* Quiet progress: a hairline across the top, and one line of instruction that goes away on first touch. */
+#progress {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 2px;
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .8s var(--soft);
+}
+#progress i {
+    display: block;
+    height: 100%;
+    background: rgba(255, 255, 255, .6);
+    transform-origin: 0 50%;
+    transform: scaleX(var(--p, 0));
+    transition: transform .7s var(--ease);
+}
+body.ready #progress { opacity: 1; }
+body.play-ready #progress, body.wiping #progress, body.playing #progress { opacity: 0; }
+
+/* Dark-tinted glass, like every small control: white-on-dark stays readable over any picture. */
+#hint {
+    position: absolute;
+    left: 50%;
+    top: calc(20px + var(--sat));
+    z-index: 30;
+    translate: -50% 0;
+    padding: 10px 18px 10px 20px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: .24em;
+    white-space: nowrap;
+    color: #fff;
+    background: rgba(18, 14, 26, .52);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2), 0 6px 24px rgba(0, 0, 0, .3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    backdrop-filter: blur(16px) saturate(1.5);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 1s var(--soft), transform 1s var(--ease);
+}
+#hint.on { opacity: 1; transform: none; }
+
+/* --------------------------------------------------------------- loader */
+
+#loader {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    transition: opacity .7s var(--soft);
+}
+#loader::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    animation: breathe 1.7s ease-in-out infinite;
+}
+body.ready #loader { opacity: 0; }
+@keyframes breathe {
+    0%, 100% { transform: scale(.7);  opacity: .22; }
+    50%      { transform: scale(1.15); opacity: .7; }
+}
+
+/* ---------------------------------------------------------- play button */
+/* A rounded triangle of frosted glass. The blur layer, the rim highlight and the
+   shadow are separate siblings on purpose: backdrop-filter stops working if any
+   ancestor has filter/opacity, so the reveal animates each part on its own. */
+
+#play-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+#play {
+    --s: clamp(220px, 34vmin, 420px);
+    position: relative;
+    width: var(--s);
+    height: var(--s);
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+    animation: float 6.5s ease-in-out infinite;
+    transition: transform .4s var(--ease);
+}
+body.play-ready #play { pointer-events: auto; }
+#play:hover  { transform: scale(1.035); }
+#play:active { transform: scale(.985); transition-duration: .12s; }
+
+@keyframes float {
+    0%, 100% { translate: 0 0; }
+    50%      { translate: 0 -9px; }
+}
+
+.play-glass, .play-rim, .play-shadow {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: scale(.9);
+    transition: opacity 1.4s var(--soft), transform 1.6s var(--ease), filter 1.4s var(--soft);
+}
+body.play-ready .play-glass,
+body.play-ready .play-rim,
+body.play-ready .play-shadow { opacity: 1; transform: none; }
+
+.play-glass {
+    -webkit-clip-path: url(#play-clip);
+    clip-path: url(#play-clip);
+    background: linear-gradient(140deg, rgba(255, 255, 255, .66) 0%, rgba(255, 255, 255, .4) 46%, rgba(255, 255, 255, .55) 100%);
+    -webkit-backdrop-filter: blur(22px) saturate(1.7) brightness(1.12);
+    backdrop-filter: blur(22px) saturate(1.7) brightness(1.12);
+}
+.play-rim { width: 100%; height: 100%; overflow: visible; filter: blur(8px); }
+body.play-ready .play-rim { filter: none; }
+.play-rim path {
+    fill: none;
+    stroke: url(#rim);
+    stroke-width: 1.6px;
+    vector-effect: non-scaling-stroke;
+}
+.play-shadow { width: 100%; height: 100%; overflow: visible; filter: blur(26px); margin-top: 5%; }
+.play-shadow path { fill: #000; opacity: .38; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .play-glass { background: rgba(255, 255, 255, .84); }
+}
+
+/* --------------------------------------------------------------- reveal */
+
+#slideshow {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1s var(--soft);
+}
+body.playing #slideshow { opacity: 1; }
+
+#videos { position: absolute; inset: 0; overflow: hidden; }
+#videos video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;                  /* same crop as the puzzle picture: the hand-off is invisible */
+    background: #000;
+    z-index: 0;
+}
+#videos video.front { z-index: 1; }     /* a hard cut is just this class moving to the other <video> */
+
+/* A gentle vignette to keep the corners calm. */
+.scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, .3) 100%);
+}
+#slideshow[data-tone="dark"] .scrim {
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .16) 100%);
+}
+
+.title {
+    --title-size: clamp(64px, min(15.5vw, 32vh), 230px);
+    --detail-size: clamp(13px, min(1.9vw, 3.5vh), 27px);
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: calc(5vh + var(--sat)) calc(6vw + var(--sar)) calc(5vh + var(--sab)) calc(6vw + var(--sal));
+    pointer-events: none;
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.again {
+    font-family: var(--font), Georgia, "Times New Roman", serif;
+    font-weight: var(--wght);
+    font-size: calc(var(--title-size) * var(--fsize));
+    letter-spacing: var(--track);
+    line-height: .95;
+    color: var(--ink);
+    text-shadow: 0 0 1px rgb(var(--sh-a) / .55), 0 0 3px rgb(var(--sh-a) / .35), 0 3px 16px rgb(var(--sh-a) / .36), 0 10px 46px rgb(var(--sh-a) / .42);
+}
+
+.line {
+    font-family: var(--font), Georgia, "Times New Roman", serif;
+    font-weight: var(--wght);
+    font-size: calc(var(--detail-size) * var(--dsize, 1));
+    font-variant-numeric: lining-nums;          /* old-style figures look wrong in capitals */
+    font-feature-settings: "lnum" 1;
+    line-height: 1.5;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    text-wrap: balance;
+    color: var(--ink2, var(--ink));
+    -webkit-text-stroke: var(--dstroke) var(--ink2, var(--ink));   /* thickens hairline faces (per font) so they don't vanish small */
+    /* a hard 1px rim (8 offsets: works everywhere, unlike paint-order) + soft halos, so the small
+       lines stay readable even when they straddle bright sky and dark ground */
+    text-shadow:
+        1px 0 0 rgb(var(--sh-b) / var(--rim1)), -1px 0 0 rgb(var(--sh-b) / var(--rim1)), 0 1px 0 rgb(var(--sh-b) / var(--rim1)), 0 -1px 0 rgb(var(--sh-b) / var(--rim1)),
+        1px 1px 0 rgb(var(--sh-b) / var(--rim2)), -1px -1px 0 rgb(var(--sh-b) / var(--rim2)), 1px -1px 0 rgb(var(--sh-b) / var(--rim2)), -1px 1px 0 rgb(var(--sh-b) / var(--rim2)),
+        0 0 4px rgb(var(--sh-b) / .8), 0 0 10px rgb(var(--sh-b) / .6), 0 0 24px rgb(var(--sh-b) / .4);
+}
+.address { margin-top: calc(var(--title-size) * .3); }
+.date    { margin-top: .95em; }
+.time    { margin-top: .2em; }
+
+/* Words arrive softly (fade + rise + a breath of blur). Font and color changes are
+   deliberately NOT transitioned - they change on the same frame as the cut. */
+.again, .line {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(10px);
+    transition: opacity 1.7s var(--soft), transform 1.9s var(--ease), filter 1.7s var(--soft);
+}
+.title.in .again, .title.in .line { opacity: 1; transform: none; filter: none; }
+.title.in .line { transition-delay: .35s; }
+.title.in .date { transition-delay: .5s; }
+.title.in .time { transition-delay: .65s; }
+
+/* ---------------------------------------------------------------- chips */
+
+.chip {
+    position: absolute;
+    z-index: 30;
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 999px;
+    color: #fff;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(18, 14, 26, .5);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 6px 24px rgba(0, 0, 0, .28);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    backdrop-filter: blur(16px) saturate(1.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .55s var(--soft), background .2s var(--soft), transform .25s var(--ease);
+}
+.chip:hover  { background: rgba(18, 14, 26, .64); }
+.chip:active { transform: scale(.94); }
+.chip svg { display: block; }
+
+#reset {
+    right: calc(16px + var(--sar));
+    bottom: calc(16px + var(--sab));
+    height: 40px;
+    min-width: 40px;
+    padding: 0 11px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: .14em;
+}
+#reset .label { display: none; }
+#reset.confirm .label { display: inline; padding-right: 3px; }
+body.ready #reset { opacity: .36; pointer-events: auto; }
+body.ready #reset:hover, body.ready #reset:focus-visible, body.ready #reset.confirm { opacity: 1; }
+body.wiping #reset, body.playing #reset { opacity: 0; pointer-events: none; }
+
+#toggle {
+    right: calc(18px + var(--sar));
+    bottom: calc(18px + var(--sab));
+    width: 46px;
+    height: 46px;
+}
+#toggle svg { width: 20px; height: 20px; fill: #fff; }
+#toggle .i-play { display: none; }
+#toggle.paused .i-pause { display: none; }
+#toggle.paused .i-play { display: block; }
+body.playing #toggle { opacity: .9; pointer-events: auto; }
+body.playing.idle #toggle { opacity: 0; pointer-events: none; }
+body.playing.idle { cursor: none; }
+
+/* --------------------------------------------------------------- misc ---- */
+
+#notice {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 14%;
+    z-index: 45;
+    padding: 0 8vw;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.6;
+    letter-spacing: .06em;
+    color: rgba(255, 255, 255, .72);
+}
+.nojs { position: fixed; inset: 0; display: grid; place-items: center; color: #fff; font-family: system-ui, sans-serif; }
+
+@media (orientation: portrait) {
+    .title {
+        --title-size: clamp(72px, 27vw, 200px);
+        --detail-size: clamp(12px, 3.6vw, 19px);
+    }
+    .line { letter-spacing: .15em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #play { animation: none; }
+    .play-glass, .play-rim, .play-shadow { transform: none; filter: none; transition-duration: .4s; }
+    .again, .line { transform: none; filter: none; transition-duration: .5s; transition-delay: 0s !important; }
+    .piece .sh { transition: none; }
+}

@@ -1,0 +1,13 @@
+/* Self-hosted fonts (SIL Open Font License - see licenses/). One weight each,
+   Latin subset only: about 220 KB for all ten, fetched only when first used. */
+
+@font-face { font-family: "Playfair Display";   font-weight: 500; font-style: normal; font-display: swap; src: url("playfair-display-500.woff2") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 600; font-style: normal; font-display: swap; src: url("cormorant-garamond-600.woff2") format("woff2"); }
+@font-face { font-family: "EB Garamond";        font-weight: 500; font-style: normal; font-display: swap; src: url("eb-garamond-500.woff2") format("woff2"); }
+@font-face { font-family: "Fraunces";           font-weight: 500; font-style: normal; font-display: swap; src: url("fraunces-500.woff2") format("woff2"); }
+@font-face { font-family: "DM Serif Display";   font-weight: 400; font-style: normal; font-display: swap; src: url("dm-serif-display-400.woff2") format("woff2"); }
+@font-face { font-family: "Lora";               font-weight: 500; font-style: normal; font-display: swap; src: url("lora-500.woff2") format("woff2"); }
+@font-face { font-family: "Bodoni Moda";        font-weight: 500; font-style: normal; font-display: swap; src: url("bodoni-moda-500.woff2") format("woff2"); }
+@font-face { font-family: "Inter";              font-weight: 500; font-style: normal; font-display: swap; src: url("inter-500.woff2") format("woff2"); }
+@font-face { font-family: "Manrope";            font-weight: 600; font-style: normal; font-display: swap; src: url("manrope-600.woff2") format("woff2"); }
+@font-face { font-family: "Josefin Sans";       font-weight: 400; font-style: normal; font-display: swap; src: url("josefin-sans-400.woff2") format("woff2"); }
