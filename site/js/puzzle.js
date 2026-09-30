@@ -89,6 +89,7 @@ async function decode(url) {
     img.src = url;
     if (img.decode) await img.decode();
     else await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    return img;
 }
 
 // ---- the puzzle -----------------------------------------------------------
@@ -105,12 +106,16 @@ export class Puzzle extends EventTarget {
         this.z = 10;
         this.drag = null;
         this.locked = false;
+        this.epoch = 0;              // bumped by reset(): cancels anything still running from the old puzzle
+        this.wipeMs = 0;
         this._move = (e) => this._onMove(e);
         this._up = (e) => this._onUp(e);
     }
 
     async init() {
-        await decode(this.image);                       // throws if the poster can't load
+        const img = await decode(this.image);           // throws if the poster can't load
+        this.imgW = img.naturalWidth;                   // (the play button lines its glass up with this picture)
+        this.imgH = img.naturalHeight;
         // Only wire up events once we know this puzzle is going to be used.
         this.piecesEl.addEventListener('pointerdown', (e) => this._onDown(e));
         this.piecesEl.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -228,7 +233,6 @@ export class Puzzle extends EventTarget {
                 this.state = freshState(pickGrid(this.W, this.H));    // e.g. phone rotated
             }
             this._build();
-            if (this.state.done) this._buildSeams();
             this._write();
             this._emitProgress();
         }, 220);
@@ -302,17 +306,38 @@ export class Puzzle extends EventTarget {
 
     // ---- solved state -----------------------------------------------------------
 
+    /**
+     * The puzzle is done. The moment the last piece lands: hand over from the pieces to the
+     * finished picture, let the lines dissolve, and start the "complete" signal a little
+     * before the last line has gone (that is when the play button begins to arrive) - so the
+     * button always appears over a clean picture, never over lines.
+     * `instant` = a solved puzzle restored on reload: just the clean picture, no lines, no show.
+     */
     _finish({ instant = false } = {}) {
+        const run = this.epoch;                          // "start over" bumps this and cancels everything below
         this.locked = true;
         this.state.done = true;
         this._save();
-        this._buildSeams();
-        this.layer.classList.add('solved');            // CSS: assembled picture on, piece outlines off, seams on
-        const done = () => {
-            this.piecesEl.style.display = 'none';       // the assembled picture is pixel-identical underneath
-            this.dispatchEvent(new Event('complete'));
-        };
-        if (instant) requestAnimationFrame(done); else setTimeout(done, 520);
+        this.layer.classList.add('solved');              // CSS: finished picture on, piece outlines off - in one frame
+        if (instant) {
+            this.piecesEl.style.display = 'none';
+            requestAnimationFrame(() => {
+                if (run !== this.epoch) return;
+                this.dispatchEvent(new Event('solved'));
+                this.dispatchEvent(new Event('complete'));
+            });
+            return;
+        }
+        this._buildSeams();                              // the same lines, once each, exactly where the outlines were
+        this.dispatchEvent(new Event('solved'));
+        setTimeout(() => {
+            if (run !== this.epoch) return;
+            this.piecesEl.style.display = 'none';        // the finished picture is pixel-identical underneath
+            const gone = this.wipeSeams();
+            setTimeout(() => { if (run === this.epoch) this.dispatchEvent(new Event('complete')); },
+                Math.max(0, this.wipeMs - 700));
+            gone.then(() => { if (run === this.epoch) this.seamsEl.textContent = ''; });
+        }, 350);                                         // let the last piece finish settling first
     }
 
     /** Each internal cut, once, as its own path - so each one can be wiped separately. */
@@ -331,20 +356,24 @@ export class Puzzle extends EventTarget {
     /**
      * Erase the puzzle lines: every segment is wiped from one end to the
      * other (direction chosen at random) at a random moment, fading as it goes.
+     * Sets this.wipeMs to how long the whole thing takes.
      */
     wipeSeams() {
         const quick = reduceMotion();
+        let end = 0;
         const anims = [...this.seamsEl.querySelectorAll('path')].map((p) => {
             const dir = Math.random() < 0.5 ? 1 : -1;
-            const delay = Math.random() * (quick ? 200 : 1900);
-            const duration = quick ? 500 : 1000 + Math.random() * 800;
+            const delay = Math.random() * (quick ? 200 : 1500);
+            const duration = quick ? 500 : 1000 + Math.random() * 700;
+            end = Math.max(end, delay + duration);
             return p.animate(
                 [{ strokeDashoffset: 0, opacity: 1 },
                  { strokeDashoffset: dir * 0.55, opacity: 0.6, offset: 0.55 },
                  { strokeDashoffset: dir, opacity: 0 }],
                 { duration, delay, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'forwards' }).finished.catch(() => {});
         });
-        return Promise.all(anims).then(() => { this.seamsEl.textContent = ''; });
+        this.wipeMs = end;
+        return Promise.all(anims);
     }
 
     // ---- helpers for the app ----------------------------------------------------
@@ -356,11 +385,13 @@ export class Puzzle extends EventTarget {
         this.locked = true;
         const loose = shuffle(this.list.filter((p) => !p.placed));
         const step = Math.min(70, 1500 / Math.max(1, loose.length));
-        loose.forEach((p, k) => setTimeout(() => this._place(p, { duration: 520 }), k * step));
+        const run = this.epoch;
+        loose.forEach((p, k) => setTimeout(() => { if (run === this.epoch) this._place(p, { duration: 520 }); }, k * step));
     }
 
     reset() {
         cookies.del(COOKIE);
+        this.epoch++;
         this.auto = false;
         this.locked = false;
         this.layer.classList.remove('solved');

@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Shared SVG resources (filters, gradients, the rounded play shape). -->
+    <!-- Shared SVG resources (filters and gradients). -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
         <defs>
             <filter id="pz-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>
@@ -37,9 +37,6 @@
                 <stop offset=".45" stop-color="#fff" stop-opacity=".22"/>
                 <stop offset="1" stop-color="#fff" stop-opacity=".7"/>
             </linearGradient>
-            <clipPath id="play-clip" clipPathUnits="objectBoundingBox">
-                <path d="M0.18 0.2034A0.06 0.06 0 0 1 0.2698 0.1513L0.7888 0.4479A0.06 0.06 0 0 1 0.7888 0.5521L0.2698 0.8487A0.06 0.06 0 0 1 0.18 0.7966Z"/>
-            </clipPath>
         </defs>
     </svg>
 
@@ -53,13 +50,13 @@
         <div id="progress" aria-hidden="true"><i></i></div>
         <p id="hint" aria-hidden="true">piece it together</p>
 
-        <!-- 2. the reveal: clips + the details. Edit the three lines below to change them. -->
+        <!-- 2. the reveal: clips + the words. Edit the headline and the three lines under it to change them. -->
         <section id="slideshow" aria-hidden="true" data-tone="light">
             <div id="videos"></div>
             <div class="scrim"></div>
             <div id="title" class="title">
                 <div class="stack">
-                    <h1 id="again" class="again">again?</h1>
+                    <h1 id="headline" class="headline">dinner?</h1>
                     <p class="line address" id="address">2512 Farlow Gap Ln, Raleigh NC, 27603</p>
                     <p class="line date" id="date">oct 17th</p>
                     <p class="line time" id="time">6pm</p>
@@ -67,12 +64,13 @@
             </div>
         </section>
 
-        <!-- the play button: a rounded triangle of frosted glass -->
+        <!-- the play button: a rounded triangle of frosted glass. It is built from plain parts
+             (see .play-glass in style.css) so every browser draws the same triangle. -->
         <div id="play-wrap">
             <button id="play" type="button" aria-label="Play">
-                <svg class="play-shadow" viewBox="0 0 1 1" aria-hidden="true"><path d="M0.18 0.2034A0.06 0.06 0 0 1 0.2698 0.1513L0.7888 0.4479A0.06 0.06 0 0 1 0.7888 0.5521L0.2698 0.8487A0.06 0.06 0 0 1 0.18 0.7966Z"/></svg>
-                <span class="play-glass"></span>
-                <svg class="play-rim" viewBox="0 0 1 1" aria-hidden="true"><path d="M0.18 0.2034A0.06 0.06 0 0 1 0.2698 0.1513L0.7888 0.4479A0.06 0.06 0 0 1 0.7888 0.5521L0.2698 0.8487A0.06 0.06 0 0 1 0.18 0.7966Z"/></svg>
+                <svg class="play-shadow" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 20.34A6 6 0 0 1 26.98 15.13L78.88 44.79A6 6 0 0 1 78.88 55.21L26.98 84.87A6 6 0 0 1 18 79.66Z"/></svg>
+                <span class="play-glass"><i class="play-blur"></i><i class="play-tint"></i></span>
+                <svg class="play-rim" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 20.34A6 6 0 0 1 26.98 15.13L78.88 44.79A6 6 0 0 1 78.88 55.21L26.98 84.87A6 6 0 0 1 18 79.66Z"/></svg>
             </button>
         </div>
 

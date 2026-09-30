@@ -35,6 +35,8 @@ export class Look {
     constructor(root) {
         this.root = root;
         this.recent = [];
+        window.addEventListener('resize', () => this.fit());
+        if (document.fonts) document.fonts.addEventListener('loadingdone', () => this.fit());
     }
 
     /** Called at the exact moment of a hard cut. Everything changes together, no fade. */
@@ -58,6 +60,23 @@ export class Look {
         s.setProperty('--rim1', tone2 === 'light' ? .55 : .3);
         s.setProperty('--rim2', tone2 === 'light' ? .45 : .24);
         this.root.dataset.tone = tone;
+        this.fit();                                        // same frame as the cut: the new font may be wider
+    }
+
+    /**
+     * Shrink the big word just enough to fit the screen, whatever word and font are showing.
+     * (Measured at full size, then --fit scales it. A 7-letter word in a wide face on a phone
+     * would otherwise run off the edges.)
+     */
+    fit() {
+        const word = this.root.querySelector('.headline');
+        const box = word && word.closest('.title');
+        if (!box) return;
+        word.style.setProperty('--fit', '1');
+        const cs = getComputedStyle(box);
+        const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const need = word.scrollWidth;                     // the word never wraps, so this is its true width
+        word.style.setProperty('--fit', need > room && room > 0 ? Math.max(0.4, (room / need) * 0.98).toFixed(3) : '1');
     }
 
     _pick() {

@@ -1,9 +1,9 @@
 # cantwaittoseeyouagain
 
 A one-page invitation. A landscape photograph arrives as a jigsaw puzzle. Solve it, press
-play, and the lines wipe away as the picture comes alive: hard-cut clips of landscapes, with
-**again?**, the address, the date and the time fading in over each one in a new font and a
-color taken from the footage.
+play, and the picture comes alive: hard-cut clips of landscapes, with a headline (**dinner?**),
+the address, the date and the time fading in over each one in a new font and a color taken
+from the footage.
 
 ## Make it (about five minutes)
 
@@ -25,26 +25,32 @@ them into `assets/`, then continue at step 2.
 1. **A puzzle.** Around 36 to 66 pieces depending on the screen (phones get bigger pieces),
    scattered over the whole screen. Drag them into place. Progress is saved, so a reload
    picks up where they left off.
-2. **A big glass play button** appears when it's finished.
-3. **Press it** and every puzzle line is wiped away, each one from one end to the other, at
-   its own moment, fading as it goes. The finished picture is the first frame of the first clip,
-   so it simply starts to move.
-4. **The reveal.** Hard cuts between clips, in a random order that never repeats until every
+2. **The lines dissolve.** The moment the last piece lands, every puzzle line is wiped away,
+   each one from one end to the other, at its own moment, fading as it goes.
+3. **A big glass play button** drifts in over the clean picture.
+4. **Press it** and the picture comes alive: the finished picture is the first frame of the first
+   clip, so it simply starts to move. (A finished puzzle that's reloaded goes straight to the
+   clean picture and the button.)
+5. **The reveal.** Hard cuts between clips, in a random order that never repeats until every
    clip has played. The text changes font and color on the same frame as each cut. A small
    pause button appears when they move the mouse or tap.
 
 Testing shortcuts: type **again** anywhere (or open the page with `#again` on the end) to
-auto-solve the puzzle. The small circular-arrow button in the corner starts over.
+auto-solve the puzzle. The word is set in `site/js/config.js` and isn't shown anywhere on the
+page. The small circular-arrow button in the corner starts over.
 
 ## Change the details
 
-Open `site/index.html` and edit the three lines under `<h1>again?</h1>`:
+Open `site/index.html` and edit the headline and the three lines under it:
 
 ```html
+<h1 id="headline" class="headline">dinner?</h1>
 <p class="line address" id="address">2512 Farlow Gap Ln, Raleigh NC, 27603</p>
 <p class="line date" id="date">oct 17th</p>
 <p class="line time" id="time">6pm</p>
 ```
+
+The headline shrinks itself to fit the screen in whichever font is showing, so any word works.
 
 Everything else worth tuning is in `site/js/config.js` (how long each clip shows, the
 auto-solve word, an optional analytics token).

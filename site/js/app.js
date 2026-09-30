@@ -1,8 +1,9 @@
 // Wires the page together:  loading -> puzzle -> play -> line-wipe -> reveal.
 //
 // The page is driven by a few classes on <body>:
-//   ready       puzzle is on screen        play-ready  puzzle solved, button shown
-//   wiping      lines are being erased     playing     video + words are showing
+//   ready       puzzle is on screen        done        puzzle solved, lines dissolving
+//   play-ready  clean picture, button shown  starting    play tapped, first clip loading
+//   playing     video + words are showing
 //   idle        (while playing) controls have faded away
 
 import config from './config.js';
@@ -14,7 +15,7 @@ import { Look, preloadFonts } from './look.js';
 const $ = (s) => document.querySelector(s);
 const body = document.body;
 const dom = {
-    puzzle: $('#puzzle'), pieces: $('#pieces'), seams: $('#seams'), assembled: $('#assembled'),
+    stage: $('#stage'), puzzle: $('#puzzle'), pieces: $('#pieces'), seams: $('#seams'), assembled: $('#assembled'),
     slideshow: $('#slideshow'), videos: $('#videos'), title: $('#title'),
     play: $('#play'), reset: $('#reset'), toggle: $('#toggle'),
     hint: $('#hint'), progress: $('#progress i'), notice: $('#notice'),
@@ -51,8 +52,10 @@ async function main() {
     idle(preloadFonts);                    // ...and the fonts, so no cut ever shows a fallback face
 
     body.classList.add('ready');
+    alignGlass(puzzle);
+    window.addEventListener('resize', () => alignGlass(puzzle));
     wirePuzzle(puzzle);
-    wirePlay(puzzle, slides);
+    wirePlay(slides);
     wireControls(puzzle, slides);
 }
 
@@ -85,6 +88,29 @@ function startAnalytics() {
     document.head.appendChild(s);
 }
 
+// ---- play button glass -------------------------------------------------------
+
+/**
+ * The play button is frosted glass showing a soft copy of the finished picture. Line that copy up
+ * with the real picture behind it (both are "cover"-fitted to the screen), so it reads as glass
+ * over the picture rather than a sticker. Plain CSS variables; see .play-blur in style.css.
+ */
+function alignGlass(puzzle) {
+    if (!puzzle.imgW || !puzzle.imgH) return;
+    const W = dom.stage.clientWidth, H = dom.stage.clientHeight;
+    const size = dom.play.offsetWidth;                      // layout size: unaffected by the float/hover transforms
+    const k = Math.max(W / puzzle.imgW, H / puzzle.imgH);
+    const w = puzzle.imgW * k, h = puzzle.imgH * k;         // the picture as drawn on screen
+    const left = (W - size) / 2 - size / 2;                 // corner of the blur layer (it overhangs by half a button)
+    const top = (H - size) / 2 - size / 2;
+    const st = dom.play.style;
+    st.setProperty('--play-bg', `url("${puzzle.image}")`);
+    st.setProperty('--play-bgw', w + 'px');
+    st.setProperty('--play-bgh', h + 'px');
+    st.setProperty('--play-bgx', ((W - w) / 2 - left) + 'px');
+    st.setProperty('--play-bgy', ((H - h) / 2 - top) + 'px');
+}
+
 // ---- puzzle ------------------------------------------------------------------
 
 function wirePuzzle(puzzle) {
@@ -97,14 +123,17 @@ function wirePuzzle(puzzle) {
         dom.progress.style.setProperty('--p', total ? placed / total : 0);
     });
     puzzle.addEventListener('grab', () => { grabbed = true; dom.hint.classList.remove('on'); });
-    puzzle.addEventListener('complete', () => {
+    // Last piece home: the lines start to dissolve right away...
+    puzzle.addEventListener('solved', () => {
         solved = true;
         dom.hint.classList.remove('on');
-        body.classList.add('play-ready');
+        body.classList.add('done');
     });
+    // ...and the button arrives over the clean picture as the last of them fade.
+    puzzle.addEventListener('complete', () => body.classList.add('play-ready'));
     puzzle.addEventListener('reset', () => {
         grabbed = false; solved = false;
-        body.classList.remove('play-ready');
+        body.classList.remove('done', 'play-ready');
         showHint();
     });
     if (!puzzle.state.done) showHint();
@@ -122,25 +151,25 @@ function wirePuzzle(puzzle) {
     }
 }
 
-// ---- play: wipe the lines, then let the picture come alive ------------------
+// ---- play: the picture comes alive ------------------------------------------
 
-function wirePlay(puzzle, slides) {
+function wirePlay(slides) {
     let started = false;
     dom.play.addEventListener('click', async () => {
         if (started) return;
         started = true;
         slides.arm();                                   // must run inside the tap (iOS)
         body.classList.remove('play-ready');
-        body.classList.add('wiping');
-        await puzzle.wipeSeams();
+        body.classList.add('starting');
         try {
             await slides.reveal();                      // waits for a real frame: never black
         } catch (err) {
             started = false;
-            body.classList.remove('wiping');
+            body.classList.remove('starting');
+            body.classList.add('play-ready');           // give the button back so they can try again
             return fail(err);
         }
-        body.classList.remove('wiping');
+        body.classList.remove('starting');
         body.classList.add('playing');
         dom.slideshow.setAttribute('aria-hidden', 'false');
         setTimeout(() => dom.title.classList.add('in'), 700);

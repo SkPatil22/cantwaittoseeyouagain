@@ -97,8 +97,9 @@ body {
 .piece.placed .sheen { opacity: 0; }
 .piece.placed .hit { pointer-events: none; cursor: default; }
 
-/* Solved: outlines hand over to the seam overlay, which is what the play button wipes away. */
-#puzzle.solved .piece .edge { opacity: 0; transition: opacity .35s var(--soft); }
+/* Solved: the piece outlines hand over to the seam overlay in a single frame (no cross-fade: that
+   made the lines dip and come back), and the overlay is what dissolves. */
+#puzzle.solved .piece .edge { opacity: 0; }
 
 #seams {
     position: absolute;
@@ -109,11 +110,10 @@ body {
 }
 #seams path {
     fill: none;
-    stroke: rgba(255, 255, 255, .5);
+    stroke: rgba(255, 255, 255, .66);
     stroke-width: 1;
     stroke-dasharray: 1 2;              /* pathLength=1: one dash = the whole line (wiped by dashoffset) */
     opacity: 0;
-    transition: opacity .35s var(--soft);
 }
 #puzzle.solved #seams path { opacity: 1; }
 
@@ -136,7 +136,7 @@ body {
     transition: transform .7s var(--ease);
 }
 body.ready #progress { opacity: 1; }
-body.play-ready #progress, body.wiping #progress, body.playing #progress { opacity: 0; }
+body.done #progress, body.playing #progress { opacity: 0; }
 
 /* Dark-tinted glass, like every small control: white-on-dark stays readable over any picture. */
 #hint {
@@ -189,9 +189,9 @@ body.ready #loader { opacity: 0; }
 }
 
 /* ---------------------------------------------------------- play button */
-/* A rounded triangle of frosted glass. The blur layer, the rim highlight and the
-   shadow are separate siblings on purpose: backdrop-filter stops working if any
-   ancestor has filter/opacity, so the reveal animates each part on its own. */
+/* A rounded triangle of frosted glass, built only from parts every browser draws the same
+   way. (An earlier version used backdrop-filter + clip-path: url(#...) on one element;
+   Safari and Firefox ignore the clip for that combination and painted the whole square.) */
 
 #play-wrap {
     position: absolute;
@@ -237,27 +237,36 @@ body.play-ready .play-glass,
 body.play-ready .play-rim,
 body.play-ready .play-shadow { opacity: 1; transform: none; }
 
-.play-glass {
-    -webkit-clip-path: url(#play-clip);
-    clip-path: url(#play-clip);
-    background: linear-gradient(140deg, rgba(255, 255, 255, .66) 0%, rgba(255, 255, 255, .4) 46%, rgba(255, 255, 255, .55) 100%);
-    -webkit-backdrop-filter: blur(22px) saturate(1.7) brightness(1.12);
-    backdrop-filter: blur(22px) saturate(1.7) brightness(1.12);
+/* The glass = a soft copy of the finished picture (blurred by the browser, and lined up with the
+   real picture behind by alignGlass() in app.js) + a white tint on top. Each layer is cut to the
+   triangle by its own plain polygon(): no url() references, nothing to go wrong. */
+.play-blur, .play-tint { position: absolute; display: block; }
+.play-blur {
+    left: -50%; top: -50%; width: 200%; height: 200%;        /* overhangs, so the blur never thins out at an edge */
+    background: var(--play-bg, none) no-repeat;
+    background-size: var(--play-bgw, 100%) var(--play-bgh, 100%);
+    background-position: var(--play-bgx, 0) var(--play-bgy, 0);
+    filter: blur(22px) saturate(1.7) brightness(1.1);
+    -webkit-clip-path: polygon(34% 35.17%, 34.05% 34.65%, 34.18% 34.15%, 34.4% 33.67%, 34.7% 33.24%, 35.07% 32.87%, 35.49% 32.57%, 35.97% 32.35%, 36.47% 32.22%, 36.99% 32.17%, 37.51% 32.21%, 38.01% 32.35%, 38.49% 32.56%, 64.44% 47.4%, 64.87% 47.69%, 65.25% 48.06%, 65.55% 48.49%, 65.77% 48.97%, 65.91% 49.48%, 65.95% 50%, 65.91% 50.52%, 65.77% 51.03%, 65.55% 51.51%, 65.25% 51.94%, 64.87% 52.31%, 64.44% 52.6%, 38.49% 67.44%, 38.01% 67.65%, 37.51% 67.79%, 36.99% 67.83%, 36.47% 67.78%, 35.97% 67.65%, 35.49% 67.43%, 35.07% 67.13%, 34.7% 66.76%, 34.4% 66.33%, 34.18% 65.85%, 34.05% 65.35%, 34% 64.83%);
+    clip-path: polygon(34% 35.17%, 34.05% 34.65%, 34.18% 34.15%, 34.4% 33.67%, 34.7% 33.24%, 35.07% 32.87%, 35.49% 32.57%, 35.97% 32.35%, 36.47% 32.22%, 36.99% 32.17%, 37.51% 32.21%, 38.01% 32.35%, 38.49% 32.56%, 64.44% 47.4%, 64.87% 47.69%, 65.25% 48.06%, 65.55% 48.49%, 65.77% 48.97%, 65.91% 49.48%, 65.95% 50%, 65.91% 50.52%, 65.77% 51.03%, 65.55% 51.51%, 65.25% 51.94%, 64.87% 52.31%, 64.44% 52.6%, 38.49% 67.44%, 38.01% 67.65%, 37.51% 67.79%, 36.99% 67.83%, 36.47% 67.78%, 35.97% 67.65%, 35.49% 67.43%, 35.07% 67.13%, 34.7% 66.76%, 34.4% 66.33%, 34.18% 65.85%, 34.05% 65.35%, 34% 64.83%);
 }
+.play-tint {
+    inset: 0;
+    background: linear-gradient(140deg, rgba(255, 255, 255, .66) 0%, rgba(255, 255, 255, .4) 46%, rgba(255, 255, 255, .55) 100%);
+    -webkit-clip-path: polygon(18% 20.34%, 18.09% 19.3%, 18.36% 18.29%, 18.8% 17.34%, 19.4% 16.49%, 20.13% 15.75%, 20.99% 15.15%, 21.93% 14.71%, 22.94% 14.43%, 23.98% 14.34%, 25.02% 14.43%, 26.03% 14.69%, 26.98% 15.13%, 78.88% 44.79%, 79.75% 45.39%, 80.49% 46.13%, 81.1% 46.99%, 81.54% 47.94%, 81.81% 48.95%, 81.91% 50%, 81.81% 51.05%, 81.54% 52.06%, 81.1% 53.01%, 80.49% 53.87%, 79.75% 54.61%, 78.88% 55.21%, 26.98% 84.87%, 26.03% 85.31%, 25.02% 85.57%, 23.98% 85.66%, 22.94% 85.57%, 21.93% 85.29%, 20.99% 84.85%, 20.13% 84.25%, 19.4% 83.51%, 18.8% 82.66%, 18.36% 81.71%, 18.09% 80.7%, 18% 79.66%);
+    clip-path: polygon(18% 20.34%, 18.09% 19.3%, 18.36% 18.29%, 18.8% 17.34%, 19.4% 16.49%, 20.13% 15.75%, 20.99% 15.15%, 21.93% 14.71%, 22.94% 14.43%, 23.98% 14.34%, 25.02% 14.43%, 26.03% 14.69%, 26.98% 15.13%, 78.88% 44.79%, 79.75% 45.39%, 80.49% 46.13%, 81.1% 46.99%, 81.54% 47.94%, 81.81% 48.95%, 81.91% 50%, 81.81% 51.05%, 81.54% 52.06%, 81.1% 53.01%, 80.49% 53.87%, 79.75% 54.61%, 78.88% 55.21%, 26.98% 84.87%, 26.03% 85.31%, 25.02% 85.57%, 23.98% 85.66%, 22.94% 85.57%, 21.93% 85.29%, 20.99% 84.85%, 20.13% 84.25%, 19.4% 83.51%, 18.8% 82.66%, 18.36% 81.71%, 18.09% 80.7%, 18% 79.66%);
+}
+
 .play-rim { width: 100%; height: 100%; overflow: visible; filter: blur(8px); }
 body.play-ready .play-rim { filter: none; }
 .play-rim path {
     fill: none;
     stroke: url(#rim);
-    stroke-width: 1.6px;
-    vector-effect: non-scaling-stroke;
+    stroke-width: .55;                  /* in the 100-unit box: about 2px at full size */
+    stroke-linejoin: round;
 }
 .play-shadow { width: 100%; height: 100%; overflow: visible; filter: blur(26px); margin-top: 5%; }
 .play-shadow path { fill: #000; opacity: .38; }
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .play-glass { background: rgba(255, 255, 255, .84); }
-}
 
 /* --------------------------------------------------------------- reveal */
 
@@ -317,10 +326,11 @@ body.playing #slideshow { opacity: 1; }
     align-items: center;
 }
 
-.again {
+.headline {
     font-family: var(--font), Georgia, "Times New Roman", serif;
     font-weight: var(--wght);
-    font-size: calc(var(--title-size) * var(--fsize));
+    font-size: calc(var(--title-size) * var(--fsize) * var(--fit, 1));   /* --fit < 1: look.js shrinks a wide word to fit the screen */
+    white-space: nowrap;
     letter-spacing: var(--track);
     line-height: .95;
     color: var(--ink);
@@ -352,13 +362,13 @@ body.playing #slideshow { opacity: 1; }
 
 /* Words arrive softly (fade + rise + a breath of blur). Font and color changes are
    deliberately NOT transitioned - they change on the same frame as the cut. */
-.again, .line {
+.headline, .line {
     opacity: 0;
     transform: translateY(14px);
     filter: blur(10px);
     transition: opacity 1.7s var(--soft), transform 1.9s var(--ease), filter 1.7s var(--soft);
 }
-.title.in .again, .title.in .line { opacity: 1; transform: none; filter: none; }
+.title.in .headline, .title.in .line { opacity: 1; transform: none; filter: none; }
 .title.in .line { transition-delay: .35s; }
 .title.in .date { transition-delay: .5s; }
 .title.in .time { transition-delay: .65s; }
@@ -405,7 +415,7 @@ body.playing #slideshow { opacity: 1; }
 #reset.confirm .label { display: inline; padding-right: 3px; }
 body.ready #reset { opacity: .36; pointer-events: auto; }
 body.ready #reset:hover, body.ready #reset:focus-visible, body.ready #reset.confirm { opacity: 1; }
-body.wiping #reset, body.playing #reset { opacity: 0; pointer-events: none; }
+body.starting #reset, body.playing #reset { opacity: 0; pointer-events: none; }
 
 #toggle {
     right: calc(18px + var(--sar));
@@ -448,6 +458,6 @@ body.playing.idle { cursor: none; }
 @media (prefers-reduced-motion: reduce) {
     #play { animation: none; }
     .play-glass, .play-rim, .play-shadow { transform: none; filter: none; transition-duration: .4s; }
-    .again, .line { transform: none; filter: none; transition-duration: .5s; transition-delay: 0s !important; }
+    .headline, .line { transform: none; filter: none; transition-duration: .5s; transition-delay: 0s !important; }
     .piece .sh { transition: none; }
 }
